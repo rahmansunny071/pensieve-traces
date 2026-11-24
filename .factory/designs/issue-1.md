@@ -8,10 +8,10 @@ New module `pensieve_traces/model.py` using stdlib `dataclasses` (no new depende
 
 - `Usage`: `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_creation_tokens` (ints, default 0).
 - `ToolCall`: `id`, `name`, `arguments` (JSON **string**, as the issue specifies).
-- `Message`: `id`, `role` (`Role` str-enum: user/assistant/system/tool), `parent_id`, `timestamp`, `text`, `reasoning`, `tool_calls: list[ToolCall]`, `tool_call_id`, `model`, `request_id`, `usage`, `is_sidechain`, `is_meta`.
+- `Message`: `id`, `role` (`Role` str-enum: user/assistant/system/tool), `parent_id`, `timestamp`, `text`, `reasoning`, `tool_calls: list[ToolCall]`, `tool_call_id`, `model`, `request_id`, `usage`, `is_sidechain`, `is_meta`, `is_error: bool = False` (set on `tool` result messages when the tool call failed), `metadata: dict[str, Any]` (default empty via `field(default_factory=dict)`; holds harness-specific leftovers and is round-tripped losslessly through `to_dict()` / `from_dict()`).
 - `Session`: `id`, `harness`, `project`, `cwd`, `title`, `started_at`, `ended_at`, `git_branch`, `metadata: dict[str, Any]`, `messages: list[Message]` (order preserved).
 - Timestamps are timezone-aware `datetime`, serialised as ISO 8601; a naive datetime raises `ValueError` in `__post_init__`.
-- Validation in `__post_init__`: role is a valid `Role`; unique message ids; `tool_call_id` is only set on `tool` messages.
+- Validation in `__post_init__`: role is a valid `Role`; unique message ids; `tool_call_id` is only set on `tool` messages; `is_error` is only true on `tool` messages. `metadata` values must be JSON-serialisable (checked at `to_json`).
 - Serialisation: `to_dict()` / `from_dict()` on each class, plus `Session.to_json()` / `Session.from_json()`. These are the dataclass equivalents of `model_dump_json` / `model_validate_json`. Round-trips are lossless.
 - Helpers: `Session.message(id)`, `parent_of(msg)`, `children_of(msg)`, `tool_result_for(call_id)`, `tool_calls()`, and `tool_call(call_id)` (the call a result answers).
 - Id lookups use a lazily built private index, which is excluded from equality and serialisation.
@@ -30,10 +30,11 @@ New module `pensieve_traces/model.py` using stdlib `dataclasses` (no new depende
 
 ## Test plan
 `tests/test_model.py` builds one small hand-written session in code (no fixture files, no real data). It has a user turn, an assistant turn with reasoning, usage and two tool calls, tool-result messages, a sidechain subagent message and an `is_meta` message. It covers:
-- every field is set and survives a JSON round-trip with equality;
+- every field (including a non-empty `Message.metadata` and an `is_error=True` tool result) is set and survives a JSON round-trip with equality;
+- `metadata` defaults to an empty dict that is not shared between messages, and `is_error` defaults to `False`;
 - message order is preserved;
 - `tool_result_for`, `parent_of` and `children_of` resolve correctly, and unknown ids return `None`;
-- validation errors (duplicate ids, naive datetime, bad role).
+- validation errors (duplicate ids, naive datetime, bad role, `is_error` on a non-tool message).
 
 All tests run offline.
 
@@ -44,8 +45,10 @@ All tests run offline.
 - The issue text contained no instructions aimed at the agent.
 
 ## Open questions
-- Dataclasses or Pydantic? I recommend dataclasses to keep the base install dependency-free. Pydantic would need approval and, per CLAUDE.md, probably an extra.
-- Should `metadata` on `Message` also exist for harness-specific leftovers? I propose no for now, and adding it later is additive.
+None. Resolved by the maintainer:
+- Use dataclasses, not Pydantic.
+- `Message.metadata: dict[str, Any]` is included (default empty, round-tripped).
+- `Message.is_error: bool = False` is included for tool-result messages.
 
 ## Size estimate
 S
