@@ -47,6 +47,10 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Factory PRs are authored by claude[bot], so by default the action denies
+          # running tests and linters on them. Only the maintainer can trigger this job,
+          # and the gate job above refuses PRs from forks.
+          restrict_untrusted_prs: "false"
           claude_args: >-
             --model sonnet
             --max-turns 40

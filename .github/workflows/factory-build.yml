@@ -25,12 +25,30 @@ jobs:
       - id: issue
         run: echo "n=${HEAD_REF#design/issue-}" >> "$GITHUB_OUTPUT"
         env: { HEAD_REF: "${{ github.event.pull_request.head.ref }}" }
+      # A design branch is written by the design agent, which may only add the design
+      # file. Refuse to run code from it if it touches anything else (for example a
+      # planted conftest.py from a prompt-injected issue). This is what makes it safe
+      # to turn off the action's restrict_untrusted_prs below.
+      - name: Design branch only changes .factory/designs/
+        run: |
+          git fetch --quiet origin "$BASE_REF"
+          outside=$(git diff --name-only "origin/$BASE_REF...HEAD" | grep -v '^\.factory/designs/' || true)
+          if [ -n "$outside" ]; then
+            echo "::error::design branch changes files outside .factory/designs/:"
+            echo "$outside"
+            exit 1
+          fi
+        env: { BASE_REF: "${{ github.event.pull_request.base.ref }}" }
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --locked --extra dev
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: "/build-from-design ${{ steps.issue.outputs.n }}"
+          # Design PRs are authored by claude[bot], which the action can't confirm has
+          # write access, so by default it denies running tests and linters. The guards
+          # above (maintainer-only label, same-repo branch, design-only diff) cover it.
+          restrict_untrusted_prs: "false"
           claude_args: >-
             --model sonnet
             --max-turns 80
