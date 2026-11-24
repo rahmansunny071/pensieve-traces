@@ -125,6 +125,43 @@ def test_non_json_arguments_fall_back_to_text():
     assert "jdoe" not in out.messages[1].tool_calls[0].arguments
 
 
+def _args_out(raw: str) -> str:
+    session = load_session()
+    session.messages[1].tool_calls[0].arguments = raw
+    return redact_session(session, StubAnonymizer()).messages[1].tool_calls[0].arguments
+
+
+def test_duplicate_json_keys_do_not_leak_shadowed_values():
+    leaky = "cat /Users/jdoe/.env; echo " + SECRETS["GH_TOKEN"] + " jdoe@vexlor-mail.io"
+    raw = f'{{"command": {json.dumps(leaky)}, "command": "ls"}}'
+    out = _args_out(raw)
+    json.loads(out)
+    assert "jdoe" not in out and SECRETS["GH_TOKEN"] not in out
+
+
+def test_nested_duplicate_json_keys_do_not_leak():
+    aws = SECRETS["AWS_KEY"]
+    raw = f'{{"a": {{"k": "jdoe", "k": "ok"}}, "b": [{{"x": "{aws}", "x": 1}}]}}'
+    out = _args_out(raw)
+    json.loads(out)
+    assert "jdoe" not in out and SECRETS["AWS_KEY"] not in out
+
+
+def test_git_branch_is_redacted():
+    session = load_session()
+    assert "jdoe" in (session.git_branch or "")
+    out = redact_session(session, StubAnonymizer())
+    assert out.git_branch is not None and "jdoe" not in out.git_branch
+
+
+@pytest.mark.parametrize("cwd", ["/Users/jdoe/", "/Users/jdoe"])
+def test_project_redacted_with_or_without_trailing_slash(cwd):
+    session = Session(id="s", cwd=cwd, project="jdoe")
+    out = redact_session(session, StubAnonymizer())
+    assert out.project is not None and "jdoe" not in out.project
+    assert out.cwd is not None and "jdoe" not in out.cwd
+
+
 def test_project_follows_redacted_cwd_basename():
     session = load_session()
     out = redact_session(session, StubAnonymizer())
@@ -216,6 +253,8 @@ def test_real_teich_redacts_fixture(real_session):
     assert "vexlor-mail.io" not in dumped
     assert out.cwd is not None and "jdoe" not in out.cwd
     assert out.project is not None and "jdoe" not in out.project
+    assert out.git_branch is not None and "vexlor-mail.io" not in out.git_branch
+    assert out.git_branch != real_session.git_branch
 
 
 def test_real_teich_arguments(real_session):

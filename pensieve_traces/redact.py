@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import copy
 import json
-import posixpath
 import warnings
+from pathlib import PurePosixPath
 from typing import Any, Protocol
 
 from pensieve_traces.model import Session
@@ -44,11 +44,29 @@ def _default_anonymizer() -> Anonymizer:
     return TraceAnonymizer()
 
 
+class _DuplicateKeyError(ValueError):
+    pass
+
+
+def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    keys = [k for k, _ in pairs]
+    if len(set(keys)) != len(keys):
+        raise _DuplicateKeyError("duplicate key")
+    return dict(pairs)
+
+
 def _redact_arguments(anonymizer: Anonymizer, arguments: str) -> str:
     if not arguments:
         return arguments
     try:
+        decoded = json.loads(arguments, object_pairs_hook=_reject_duplicate_keys)
+    except _DuplicateKeyError:
+        # json.loads keeps only the last duplicate key, so comparing the decoded value with its
+        # redaction would miss secrets in the earlier, shadowed values and the original string
+        # (which still contains them) would be returned. Re-encode the redacted last-wins value
+        # instead: shadowed duplicates are dropped, so no original text can survive.
         decoded = json.loads(arguments)
+        return json.dumps(anonymizer.anonymize_value(decoded))
     except ValueError:
         return anonymizer.anonymize_text(arguments)
     redacted = anonymizer.anonymize_value(copy.deepcopy(decoded))
@@ -77,8 +95,8 @@ def redact_session(session: Session, anonymizer: Anonymizer | None = None) -> Se
     if out.cwd is not None:
         out.cwd = anon.anonymize_text(out.cwd)
     if out.project is not None:
-        if original_cwd and out.cwd and session.project == posixpath.basename(original_cwd):
-            out.project = posixpath.basename(out.cwd)
+        if original_cwd and out.cwd and session.project == PurePosixPath(original_cwd).name:
+            out.project = PurePosixPath(out.cwd).name
         else:
             out.project = anon.anonymize_text(out.project)
     if out.title is not None:
