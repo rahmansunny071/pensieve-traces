@@ -8,7 +8,7 @@ After `convert`, sharing means hand-running `hf upload`, with no check that the 
 - NEW `pensieve_traces/upload.py`: `collect_files(dir) -> list[Path]` (top-level `*.jsonl`); `check_redaction(files) -> list[Path]` returns files whose first line is not a JSON object with `pensieveRedacted is True` (missing, false, malformed, empty: all unredacted, fail closed); `upload_dataset(folder, repo_id, *, private=True, api=None) -> None`.
 - huggingface_hub calls (checked against 1.8.0): import lazily; `api = huggingface_hub.HfApi()` (no token argument anywhere; auth is the user's `hf auth login`). `api.repo_exists(repo_id, repo_type="dataset")`; if it exists, `api.dataset_info(repo_id).private`; if the repo is public and `--public` was not given, abort (never put private-by-default traces in a public repo). Else `api.create_repo(repo_id, repo_type="dataset", private=private, exist_ok=True)`, then upload exactly the files whose marker was checked: `api.create_commit(repo_id=repo_id, repo_type="dataset", operations=[CommitOperationAdd(path_in_repo=f.name, path_or_fileobj=str(f)) for f in files], commit_message="Upload traces via pensieve-traces")`. `upload_folder(allow_patterns=...)` is not used: it matches with fnmatch, so `*` crosses `/` and `.jsonl` files in subfolders would go up unchecked. An existing repo with `private is not True` counts as public; with `--public` and an existing private repo, print that it stays private. `check_redaction` reads only the first line (decode error, empty file, non-dict line: unredacted). This reverses #4's "no extra header keys" decision.
 - CLI `upload DIR --repo ID [--public] [--allow-unredacted] [--yes]`, registered next to `convert`. Flow: collect files (none: error); marker check (fail with the file list unless `--allow-unredacted`, which prints a warning); print summary (file count, total bytes, repo, visibility); `--public` prints a prominent warning; prompt `Proceed? [y/N]` via `input()` unless `--yes`; non-TTY without `--yes` aborts as "no". Then upload. Missing `huggingface_hub`: stderr hint `pip install 'pensieve-traces[hub]'`, exit 1, checked before any network. All errors exit 1; exceptions from the hub are reported as one stderr line without headers or tokens.
-- pyproject: `[project.optional-dependencies] hub = ["huggingface_hub>=1.0,<2"]`; `dependencies` stays `[]`; `uv lock` regenerates `uv.lock`.
+- pyproject: `[project.optional-dependencies] hub = ["huggingface_hub>=1.0,<3"]`; `dependencies` stays `[]`; `uv lock` regenerates `uv.lock`.
 
 ## Alternatives rejected
 - Sidecar manifest as the marker: can drift from the files; the header travels with each file.
@@ -34,3 +34,5 @@ Offline, runs under `--extra dev` alone. A fake `huggingface_hub` module in `sys
 
 ## Size estimate
 M
+
+Range verified against huggingface_hub 1.33.0 and 2.4.0 (every API used is identical); `<3` keeps teich's transitive 2.4.0 in `uv.lock`.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import sys
 import types
@@ -51,6 +52,11 @@ def hub(monkeypatch: pytest.MonkeyPatch) -> type[FakeApi]:
     mod.CommitOperationAdd = FakeOp  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "huggingface_hub", mod)
     return FakeApi
+
+
+@pytest.fixture
+def tty(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
 
 
 def write(path: Path, marker: Any = True) -> Path:
@@ -120,7 +126,9 @@ def test_allow_unredacted_warns(tmp_path: Path, hub: type[FakeApi], capsys) -> N
     assert len(commit_call()["operations"]) == 1
 
 
-def test_prompt_no_aborts(tmp_path: Path, hub: type[FakeApi], monkeypatch, capsys) -> None:
+def test_prompt_no_aborts(
+    tmp_path: Path, hub: type[FakeApi], tty: None, monkeypatch, capsys
+) -> None:
     write(tmp_path / "a.jsonl")
     monkeypatch.setattr("builtins.input", lambda _p: "n")
     assert up(tmp_path) == 1
@@ -128,14 +136,14 @@ def test_prompt_no_aborts(tmp_path: Path, hub: type[FakeApi], monkeypatch, capsy
     assert "files:      1" in capsys.readouterr().out
 
 
-def test_prompt_yes_uploads(tmp_path: Path, hub: type[FakeApi], monkeypatch) -> None:
+def test_prompt_yes_uploads(tmp_path: Path, hub: type[FakeApi], tty: None, monkeypatch) -> None:
     write(tmp_path / "a.jsonl")
     monkeypatch.setattr("builtins.input", lambda _p: "y")
     assert up(tmp_path) == 0
     assert any(k == "create_commit" for k, _ in FakeApi.calls)
 
 
-def test_prompt_eof_aborts(tmp_path: Path, hub: type[FakeApi], monkeypatch) -> None:
+def test_prompt_eof_aborts(tmp_path: Path, hub: type[FakeApi], tty: None, monkeypatch) -> None:
     write(tmp_path / "a.jsonl")
 
     def eof(_p: str) -> str:
@@ -212,3 +220,20 @@ def test_convert_then_upload(tmp_path: Path, hub: type[FakeApi], monkeypatch) ->
     raw = tmp_path / "raw"
     assert cli.main(["convert", str(src), "--to", "sts", "--out", str(raw), "--no-redact"]) == 0
     assert up(raw, "--yes") == 1
+
+
+def test_piped_stdin_without_yes_aborts(
+    tmp_path: Path, hub: type[FakeApi], monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    write(tmp_path / "a.jsonl")
+    monkeypatch.setattr(sys, "stdin", io.StringIO("y\n"))  # StringIO.isatty() is False
+    assert up(tmp_path) == 1
+    assert not any(k in {"create_repo", "create_commit"} for k, _ in FakeApi.calls)
+    assert "pass --yes" in capsys.readouterr().err
+
+
+def test_missing_hub_checked_before_summary(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.setitem(sys.modules, "huggingface_hub", None)
+    write(tmp_path / "a.jsonl")
+    assert up(tmp_path) == 1  # no --yes: must fail before any prompt
+    assert "files:" not in capsys.readouterr().out

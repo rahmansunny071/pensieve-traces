@@ -19,6 +19,7 @@ __all__ = [
     "UploadError",
     "check_redaction",
     "collect_files",
+    "require_hub",
     "upload_files",
 ]
 
@@ -59,6 +60,11 @@ def _import_hub() -> Any:
     except ImportError as exc:
         raise HubUnavailableError(_HINT) from exc
     return huggingface_hub
+
+
+def require_hub() -> None:
+    """Raise :class:`HubUnavailableError` (with an install hint) if huggingface_hub is missing."""
+    _import_hub()
 
 
 def upload_files(

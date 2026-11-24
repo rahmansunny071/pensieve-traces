@@ -10,7 +10,7 @@ dependencies = []
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 redact = ["teich>=0.3.8,<0.4"]
-hub = ["huggingface_hub>=1.0,<2"]
+hub = ["huggingface_hub>=1.0,<3"]
 
 [project.scripts]
 pensieve-traces = "pensieve_traces.cli:main"

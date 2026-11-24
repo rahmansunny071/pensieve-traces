@@ -66,6 +66,9 @@ def _warn(message: str) -> None:
 
 
 def _confirm() -> bool:
+    if not sys.stdin.isatty():
+        print("pensieve-traces: stdin is not a terminal; pass --yes to upload", file=sys.stderr)
+        return False
     try:
         return input("Proceed with upload? [y/N] ").strip().lower() in {"y", "yes"}
     except EOFError:
@@ -76,6 +79,10 @@ def _upload(args: argparse.Namespace) -> None:
     folder = Path(args.input)
     if not folder.is_dir():
         raise CliError(f"no such directory: {folder}")
+    try:
+        hub_upload.require_hub()
+    except hub_upload.HubUnavailableError as exc:
+        raise CliError(str(exc)) from exc
     files = hub_upload.collect_files(folder)
     if not files:
         raise CliError(f"no *.jsonl files in {folder}")
