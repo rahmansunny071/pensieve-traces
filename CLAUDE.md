@@ -10,6 +10,12 @@ Architecture (target): readers (claude_code, …) → one canonical `Session` mo
 Every reader and writer goes through the canonical model; never convert
 format-to-format directly.
 
+## Release phase
+mvp. In mvp, only blockers are fixed inside a PR (the main path breaks on realistic
+input, private data leaks on realistic input, a hard-rule violation, or a test that falsely passes);
+everything else is filed as an `improvement` issue. Change this line to `hardening` before a first
+formal release.
+
 ## Setup
 uv sync --locked --extra dev    # same lockfile CI uses
 

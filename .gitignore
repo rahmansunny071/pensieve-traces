@@ -8,3 +8,5 @@ build/
 # never commit real agent traces
 *.trace.jsonl
 traces/
+# factory skill run logs (local, may include token counts)
+.factory/runs/
