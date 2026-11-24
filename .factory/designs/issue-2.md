@@ -8,14 +8,14 @@ New `pensieve_traces/readers/claude_code.py`, stdlib only.
 
 **API**
 - `read_session(path) -> Session` streams the file line by line. Blank lines are skipped. An empty file returns a Session with no messages.
-- `read_project(dir) -> list[Session]` reads each `*.jsonl` directly in the directory (non-recursive). Files sharing a `sessionId` (e.g. subagent `agent-*.jsonl`) merge into one Session, messages ordered by timestamp, each keeping its `is_sidechain` flag, so returned ids are unique. Sessions sort by `started_at`, those without timestamps last.
+- `read_project(dir) -> list[Session]` reads each `*.jsonl` directly in the directory (non-recursive). Files are read in sorted filename order. Files sharing a `sessionId` (e.g. subagent `agent-*.jsonl`) merge into one Session, each message keeping its `is_sidechain` flag, so ids are unique. Session-level fields (cwd, git branch, title) come from the main file (stem equals `sessionId`), else the first in sorted order. Messages use a stable sort on `(timestamp is None, timestamp)`: file order breaks ties, untimestamped go last. Repeated uuids across files are skipped with a debug log; `started_at`/`ended_at` are recomputed after merging. Sessions sort by `(started_at is None, started_at, id)`.
 
 **Errors**
 - `ClaudeCodeParseError(ValueError)` carries path and line number. Raised for bad JSON, non-object lines, and kept records with the wrong structure (never a bare KeyError/TypeError).
 - Duplicate uuids are skipped with a debug log.
 
 **Filtering**
-- Allowlist: only `user`, `assistant`, `system` records become messages. Everything else is skipped with `logger.debug`. `ai-title` sets `Session.title` (last wins).
+- Allowlist: only `user`, `assistant`, `system` records become messages. Everything else is skipped with `logger.debug`. `ai-title` sets `Session.title` from the record's top-level `aiTitle` string (last wins).
 - Kept records are read only through the listed fields. Top-level `toolUseResult` (can hold full file contents) is ignored. Dropped-record content is never stored, including in `metadata`.
 
 **Content shapes**
@@ -34,6 +34,7 @@ New `pensieve_traces/readers/claude_code.py`, stdlib only.
 
 **Split turns and usage**
 - Assistant records sharing a `requestId` stay separate messages (same `request_id`, parent chain intact).
+- Usage keys map `input_tokens`->`input_tokens`, `output_tokens`->`output_tokens`, `cache_read_input_tokens`->`cache_read_tokens`, `cache_creation_input_tokens`->`cache_creation_tokens`; missing or null become 0, other keys are ignored. The reader builds `Usage` from this mapping and never calls `Usage.from_dict` on the raw dict.
 - `message.usage` goes only on the last record of each `requestId` group; others get none. Contract downstream writers rely on: summing usage across messages gives the per-request total.
 
 ## Alternatives rejected
@@ -49,11 +50,11 @@ New `pensieve_traces/readers/claude_code.py`, stdlib only.
 ## Test plan
 Offline, hand-written synthetic fixtures (fake ids, paths like `/work/demo`). Fixtures: `plain_chat`, `thinking`, `tool_use_result` (error result, parallel results), `split_turn`, `sidechain`, `meta`, `string_content`, `system`, `image`, `blank_truncated`, `dup_uuid`, `empty`, `internal_records` (each dropped type with a unique sentinel, plus a sentinel in `toolUseResult`).
 - Assert exact message sequence, ids and parents, fields.
-- No sentinel in `session.to_json()`.
+- No sentinel in `session.to_json()`, except `ai-title`: its `aiTitle` value must equal `session.title`, and a sentinel in any other field of that record must not appear.
 - Unknown types skipped (caplog on the reader's logger name).
 - Malformed and truncated lines raise with path and line number.
-- Usage only on the last record of a request group.
-- `read_project`: merged sessions, unique ids, sort order with untimestamped last.
+- Usage only on the last record of a request group; a fixture with non-zero cache tokens asserts the key mapping.
+- `read_project`: merged sessions, unique ids; session fields come from the main file (and from the first sorted file when none is main); equal timestamps keep file order, untimestamped messages last; cross-file duplicate uuids skipped; `started_at`/`ended_at` recomputed; sessions sorted by `(started_at is None, started_at, id)`.
 - `teich` cross-check via `pytest.importorskip("teich")`: merge assistant messages sharing a `request_id`, compare the `(role, text)` sequence, falling back to roles only. `teich` is not a dependency.
 
 ## Risks
