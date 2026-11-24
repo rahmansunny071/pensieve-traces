@@ -77,6 +77,20 @@ pensieve-traces convert path/to/<project-dir> --to sts --out traces/
 - Fields STS has no place for are dropped: parent ids, usage, request ids, `is_meta`/`is_error` flags, metadata, `cwd`, `project`, branch and session start/end times. Meta messages are still written.
 - From Python: `pensieve_traces.writers.sts.write_session(session, path)` and `session_to_sts_lines(session)` (the latter does not redact).
 
+## Uploading to the Hub
+
+`pensieve-traces upload` pushes converted traces to a Hugging Face dataset, **private by default**. It needs the optional extra and your own login (`hf auth login`); the tool never asks for, stores or prints a token.
+
+```bash
+pip install "pensieve-traces[hub]"
+pensieve-traces upload traces/ --repo <user>/<dataset>   # private unless --public
+```
+
+- `convert` writes the STS header key `pensieveRedacted` (`true` when redaction ran, `false` with `--no-redact`). `upload` refuses any file whose first line lacks `"pensieveRedacted": true` (a missing marker counts as unredacted) unless you pass `--allow-unredacted`. The marker is an attestation, not proof; review traces before sharing.
+- Only the top-level `*.jsonl` files of the directory are uploaded, at the repo root.
+- A summary (file count, total size, repo, visibility) is shown and you are asked to confirm; `--yes` skips the prompt.
+- `--public` must be explicit and prints a warning. If the repo already exists and is public, the upload is refused unless `--public` is given. Without the `hub` extra the command prints an install hint and exits 1.
+
 ## How this repo is built: an agent factory
 
 Work happens through an issue-driven factory on Claude Code GitHub Actions. Agents write short designs, the maintainer signs off, then agents build, test and open PRs. Only the maintainer can start or advance work, merge to `main`, or publish anything.

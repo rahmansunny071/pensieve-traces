@@ -111,6 +111,7 @@ def test_write_session_redacts_by_default(tmp_path: Path) -> None:
     lines = [json.loads(x) for x in out.read_text().splitlines()]
     assert lines[1]["message"]["content"] == "LIST THE FILES"
     assert lines[0]["name"] == "LIST THE DEMO FILES"
+    assert lines[0]["pensieveRedacted"] is True
     assert out.read_text().endswith("\n")
 
 
@@ -118,7 +119,15 @@ def test_write_session_no_redact_warns(tmp_path: Path) -> None:
     out = tmp_path / "o.jsonl"
     with pytest.warns(UserWarning, match="Redaction disabled"):
         write_session(fixture_session(), out, redact=False)
-    assert [json.loads(x) for x in out.read_text().splitlines()] == golden("tool_session.sts.jsonl")
+    got = [json.loads(x) for x in out.read_text().splitlines()]
+    want = golden("tool_session.sts.jsonl")
+    assert got[0] == {**want[0], "pensieveRedacted": False}
+    assert got[1:] == want[1:]
+
+
+def test_session_to_sts_lines_marker_only_when_requested() -> None:
+    assert "pensieveRedacted" not in session_to_sts_lines(fixture_session())[0]
+    assert session_to_sts_lines(fixture_session(), redacted=True)[0]["pensieveRedacted"] is True
 
 
 def test_write_session_unicode_verbatim(tmp_path: Path) -> None:
