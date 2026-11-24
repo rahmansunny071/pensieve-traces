@@ -36,12 +36,34 @@ def _load(input_path: Path) -> list[Session]:
     raise CliError(f"no such file or directory: {input_path}")
 
 
+def _check_out_dir(input_path: Path, out_dir: Path) -> None:
+    """Refuse an output directory that could overwrite the input session files.
+
+    Claude Code names session files ``<session id>.jsonl``, the same name ``convert`` writes,
+    so writing into the input directory would silently replace the originals.
+    """
+    src = input_path.resolve()
+    out = out_dir.resolve()
+    if src.is_dir() and (out == src or out.is_relative_to(src)):
+        raise CliError(
+            f"--out {out_dir} is the input directory or inside it; "
+            "choose another directory so the original session files are not overwritten"
+        )
+    if src.is_file() and out == src.parent:
+        raise CliError(
+            f"--out {out_dir} is the directory of the input file; "
+            "choose another directory so the original session files are not overwritten"
+        )
+
+
 def _convert(args: argparse.Namespace) -> None:
-    sessions = _load(Path(args.input))
+    input_path = Path(args.input)
+    sessions = _load(input_path)
     for session in sessions:
         if not _SAFE_ID.fullmatch(session.id):
             raise CliError(f"session id {session.id!r} cannot be used as a file name")
     out_dir = Path(args.out)
+    _check_out_dir(input_path, out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     writer = WRITERS[args.to]
     for session in sessions:

@@ -97,6 +97,40 @@ def test_bad_session_id_writes_nothing(tmp_path: Path, capsys: pytest.CaptureFix
     assert not (tmp_path / "evil.jsonl").exists()
 
 
+@pytest.mark.parametrize("out", [".", "sub"])
+def test_out_in_input_dir_refused(
+    tmp_path: Path, out: str, fake_teich: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    src = project / "sess-sts.jsonl"  # named <session id>.jsonl, as Claude Code does
+    shutil.copy(SESSION, src)
+    original = src.read_bytes()
+    assert run(str(project), "--to", "sts", "--out", str(project / out)) == 1
+    assert src.read_bytes() == original
+    assert sorted(p.name for p in project.iterdir()) == ["sess-sts.jsonl"]
+    err = capsys.readouterr().err
+    assert err.count("\n") == 1 and "not overwritten" in err
+
+
+def test_out_is_input_file_dir_refused(
+    tmp_path: Path, fake_teich: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    src = tmp_path / "sess-sts.jsonl"
+    shutil.copy(SESSION, src)
+    original = src.read_bytes()
+    assert run(str(src), "--to", "sts", "--out", str(tmp_path)) == 1
+    assert src.read_bytes() == original
+    assert "not overwritten" in capsys.readouterr().err
+
+
+def test_out_beside_input_file_subdir_allowed(tmp_path: Path, fake_teich: None) -> None:
+    src = tmp_path / "sess-sts.jsonl"
+    shutil.copy(SESSION, src)
+    assert run(str(src), "--to", "sts", "--out", str(tmp_path / "traces")) == 0
+    assert (tmp_path / "traces" / "sess-sts.jsonl").is_file()
+
+
 def test_missing_path_and_empty_dir(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert run(str(tmp_path / "nope"), "--to", "sts", "--out", str(tmp_path / "o")) == 1
     assert "no such file" in capsys.readouterr().err
