@@ -1,0 +1,2 @@
+{"type": "user", "uuid": "e1", "parentUuid": null, "sessionId": "sess-early", "timestamp": "2026-03-01T09:00:00.000Z", "cwd": "/work/demo", "isSidechain": false, "message": {"role": "user", "content": "earlier question"}}
+{"type": "assistant", "uuid": "e2", "parentUuid": "e1", "sessionId": "sess-early", "timestamp": "2026-03-01T09:00:01.000Z", "cwd": "/work/demo", "isSidechain": false, "requestId": "r9", "message": {"role": "assistant", "model": "model-x", "content": [{"type": "text", "text": "earlier answer"}]}}
