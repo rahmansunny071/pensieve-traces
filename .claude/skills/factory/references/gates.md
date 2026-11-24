@@ -2,22 +2,24 @@
 
 Merge an implementation PR only when **every** gate below holds on the PR's **current** commit. Check the
 mechanical gates yourself; a reviewer's summary is evidence, not proof. If a gate fails, don't merge: fix
-it (if mechanical) or stop and ask (SKILL.md → "Stopping to ask").
+it if it's mechanical, otherwise **flag and continue** (SKILL.md).
 
 | # | Gate | How to check |
 |---|---|---|
-| 1 | **CI green** | Bounded poll (below): every required check `pass`, none pending |
+| 1 | **CI green** | Run-level watch (below): every required check `pass`, none pending |
 | 2 | **Up to date with `main`** | `gh pr view <PR> --json mergeStateStatus` isn't `BEHIND` or `DIRTY`. If it's `BEHIND`: `gh api -X PUT repos/<owner/repo>/pulls/<PR>/update-branch`, then re-check gate 1. `BLOCKED` alone just means "needs approval" and is covered by `--admin` |
-| 3 | **No open blockers** | The Opus code review returned `READY`, or every blocker it listed was fixed by the builder **and** you verified each one with its reproduction on the current commit. Improvements don't block in the MVP phase |
+| 3 | **No open blockers** | The Opus code review returned `READY`, or every blocker was fixed by the builder **and** you verified each one with its reproduction on the current commit. Improvements don't block in the mvp phase |
 | 4 | **Deviations disclosed and minor** | The PR body's "Deviations" plus the review's `undisclosed_deviations`. Scope, interface or dependency changes aren't minor |
 | 5 | **No hard-rule violations** | Your own read of the diff against `CLAUDE.md`'s hard rules |
 | 6 | **No workflow changes** | `gh pr diff <PR> --name-only` has nothing under `.github/`. Those go to the maintainer, in their own PR |
 | 7 | **Dependency changes exactly as the plan names** | The `pyproject.toml` diff (`dependencies`, `optional-dependencies`, `version`) matches the plan; `uv.lock` changes only to match |
 | 8 | **`CLAUDE.md` and `.claude/` unchanged** | `gh pr diff <PR> --name-only` |
 | 9 | **Closes its issue** | The PR body has `Closes #<N>` |
-| 10 | **You aren't unsure** | Skim the diff yourself. If something still bothers you, stop; don't merge |
+| 10 | **Handoff present** | The PR body has an up-to-date "## Handoff" section |
+| 11 | **All review threads resolved** | The unresolved-thread query (below) returns 0. No maintainer question is left open, and every blocker thread was verified and resolved |
+| 12 | **You aren't unsure** | Skim the diff yourself. If something still bothers you, flag it on the PR instead of merging |
 
-## Bounded CI polling (gate 1)
+## Bounded CI waits (gate 1)
 
 Watch the **workflow run**, not the PR's checks. `gh pr checks --watch` follows individual checks, and
 GitHub sometimes leaves one "pending" after its job has finished, which hangs the whole run. A run-level
@@ -33,7 +35,53 @@ Run it with a tool timeout (or in the background), not an open-ended wait. Don't
 Code blocks foreground `sleep`, and macOS has no `timeout` command. If the run is `success` but a PR check
 still shows pending, `gh run rerun <id>` clears it.
 
+## Posting questions (and other review comments) inline
+
+One review, many line-anchored comments. Write the payload to a temp file, then:
+
+```bash
+cat > /tmp/review.json <<'JSON'
+{"event": "COMMENT",
+ "body": "Summary: 1 question, 2 improvements.",
+ "comments": [
+   {"path": "pkg/writer.py", "line": 42, "side": "RIGHT",
+    "body": "[question] Should `--out` default to `./traces` or require an explicit path?\nOptions: (a) default ./traces; (b) required.\nRecommendation: (a), matching the README example."}
+ ]}
+JSON
+gh api -X POST repos/<owner/repo>/pulls/<PR>/reviews --input /tmp/review.json
+```
+
+`line` must fall inside the PR's diff. If GitHub rejects a comment (HTTP 422), anchor it to the nearest
+changed line, or put that question in a plain PR comment (`gh pr comment <PR> --body-file …`). For questions
+about the plan before any code exists, anchor them on `.factory/designs/issue-<N>.md` in the draft PR.
+
+Reply on a thread: `gh api -X POST repos/<owner/repo>/pulls/<PR>/comments/<comment-id>/replies -f body="…"`.
+
+## Finding and resolving threads (gate 11, and resume)
+
+```bash
+gh api graphql -f query='
+query($o:String!,$r:String!,$n:Int!){ repository(owner:$o,name:$r){ pullRequest(number:$n){
+  reviewThreads(first:100){ nodes{ id isResolved path line
+    comments(first:20){ nodes{ databaseId author{login} createdAt body } } } } } } }' \
+  -f o=<owner> -f r=<repo> -F n=<PR> \
+  -q '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved|not)'
+```
+
+- **Unresolved count** (gate 11): the same query piped to `| length`, or count the objects returned.
+- **New maintainer replies** (resume): a thread whose **last comment's author** is the maintainer is
+  waiting on you. `queue.py` does this check for you.
+- **Resolve** a thread after verifying it's addressed:
+  `gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' -f id=<thread-node-id>`
+
+Resolve only what you've verified: a blocker's fix (repro plus CI), an answered question that's been
+implemented, or an improvement filed as an issue (reply with the link first).
+
 ## Merge
+
+Before merging, append the Handoff's gist to `.factory/designs/issue-<N>.md` under a final
+"## Implementation notes" heading (what was built and why, decisions from review threads, follow-up
+issues), commit it on the branch ("docs: implementation notes (#<N>)"), push, and let CI pass. Then:
 
 ```bash
 gh pr merge <PR> --merge --admin --delete-branch
@@ -42,9 +90,9 @@ gh pr merge <PR> --merge --admin --delete-branch
 - `--admin` uses the maintainer's ruleset bypass (a PR's author can't approve their own PR).
 - Use `--merge`, never `--squash` or `--rebase`, so release tags stay on `main`'s history.
 
-Then post one comment on the PR: `Merged by the factory orchestrator: CI green; review READY (or N
-blockers fixed and verified); no workflow/dependency/CLAUDE.md surprises; improvements → #M.` Log it,
-`git -C <repo> pull --ff-only`, and `git worktree remove <worktree>`.
+Then post one comment on the PR: `Merged by the factory orchestrator: CI green; review READY (or N blockers
+fixed and verified); all threads resolved; no workflow/dependency/CLAUDE.md surprises; improvements → #M.`
+Log it, `git -C <repo> pull --ff-only`, and `git worktree remove <worktree>`.
 
 ## After merging something that touches the factory itself
 
