@@ -16,8 +16,9 @@ Id and parent contract
 
 Usage contract
     Assistant records sharing a ``requestId`` stay separate messages. For each ``requestId``,
-    the usage of the last assistant record in file order (including records that produce no
-    message) is put on the last assistant message of that group; every other message in the
+    the usage of the last assistant record in file-read order (including records that produce
+    no message) is put on the last kept assistant message of that group in the final merged
+    order, also when the group spans several files of one session; every other message in the
     group has no usage. If the group produced no messages, its usage is dropped (debug log).
     Summing usage across messages gives the per-request total. Key mapping:
     ``input_tokens`` -> ``input_tokens``, ``output_tokens`` -> ``output_tokens``,
@@ -76,6 +77,7 @@ class _ParsedFile:
     title: str | None = None
     messages: list[Message] = field(default_factory=list)
     record_uuids: list[str] = field(default_factory=list)  # parallel to messages
+    request_usage: dict[str, Usage | None] = field(default_factory=dict)
 
 
 def _join(parts: list[str]) -> str:
@@ -106,7 +108,10 @@ class _FileParser:
                     raise self.fail(f"invalid UTF-8: {exc.reason}") from exc
                 if text.strip():
                     self._record(text)
-        self._attach_usage()
+        for msg, usage in self._pending:
+            if msg.request_id is None:
+                msg.usage = usage  # no requestId: keeps its own record's usage
+        self.parsed.request_usage = self._request_usage
         if self._session_id is not None:
             self.parsed.session_id = self._session_id
         self.parsed.messages = [m for m, _ in self._pending]
@@ -118,7 +123,7 @@ class _FileParser:
     def _record(self, raw: str) -> None:
         try:
             rec = json.loads(raw)
-        except ValueError as exc:
+        except (ValueError, RecursionError) as exc:
             raise self.fail(f"invalid JSON: {exc}") from exc
         if not isinstance(rec, dict):
             raise self.fail("line is not a JSON object")
@@ -308,27 +313,6 @@ class _FileParser:
             }
         ]
 
-    def _attach_usage(self) -> None:
-        # Per requestId: the last assistant record's usage goes on the group's last assistant
-        # message; other messages get None (see module docstring). Messages without a
-        # requestId keep their own record's usage (set in _kept).
-        last: dict[str, Message] = {}
-        for msg, _ in self._pending:
-            if msg.role is Role.ASSISTANT and msg.request_id is not None:
-                last[msg.request_id] = msg
-        for msg, usage in self._pending:
-            if msg.role is Role.ASSISTANT and msg.request_id is None:
-                msg.usage = usage
-        for request_id, usage in self._request_usage.items():
-            if request_id in last:
-                last[request_id].usage = usage
-            else:
-                logger.debug(
-                    "%s: dropping usage of requestId %r: no messages in group",
-                    self.path,
-                    request_id,
-                )
-
 
 def _nonempty_str(value: Any) -> bool:
     return isinstance(value, str) and bool(value)
@@ -351,6 +335,23 @@ def _tool_result_text(content: Any) -> str:
     return _join(parts)
 
 
+def _attach_usage(messages: list[Message], files: list[_ParsedFile]) -> None:
+    """Put each requestId group's usage on its last message in merged order (see docstring)."""
+    usage_by_request: dict[str, Usage | None] = {}
+    for parsed in files:  # file-read order: the last record of a group wins
+        usage_by_request.update(parsed.request_usage)
+    last: dict[str, Message] = {}
+    for msg in messages:
+        if msg.role is Role.ASSISTANT and msg.request_id is not None:
+            msg.usage = None
+            last[msg.request_id] = msg
+    for request_id, usage in usage_by_request.items():
+        if request_id in last:
+            last[request_id].usage = usage
+        else:
+            logger.debug("dropping usage of requestId %r: no messages in group", request_id)
+
+
 def _build_session(session_id: str, files: list[_ParsedFile]) -> Session:
     """Merge the parsed files of one session (``files`` is in sorted filename order)."""
     main = next((f for f in files if f.path.stem == session_id), files[0])
@@ -370,6 +371,7 @@ def _build_session(session_id: str, files: list[_ParsedFile]) -> Session:
     if len(files) > 1:
         # Stable: file order breaks ties; untimestamped messages go last.
         messages.sort(key=lambda m: (m.timestamp is None, m.timestamp))
+    _attach_usage(messages, files)
     stamps = [m.timestamp for m in messages if m.timestamp is not None]
     cwd = main.cwd
     return Session(

@@ -233,6 +233,7 @@ def test_truncated_line_reports_path_and_line():
         (json.dumps(asst_rec(usage={"input_tokens": "5"})), "not an integer"),
         (json.dumps(asst_rec(usage={"output_tokens": 1.5})), "not an integer"),
         (json.dumps(asst_rec(usage={"output_tokens": True})), "not an integer"),
+        ("[" * 100000 + "]" * 100000, "invalid JSON"),
     ],
 )
 def test_malformed_records_raise_parse_error(tmp_path, record, fragment):
@@ -379,6 +380,30 @@ def test_cross_file_repeated_record_skips_all_derived_messages(tmp_path):
     write_lines(tmp_path, json.dumps(again), name="b.jsonl")
     (s,) = read_project(tmp_path)
     assert [(m.id, m.text) for m in s.messages] == [("u1", "hi")]
+
+
+def test_usage_not_double_counted_across_merged_files(tmp_path):
+    def rec(uuid, out, ts):
+        r = asst_rec(uuid, usage={"output_tokens": out}, requestId="r", sessionId="S", timestamp=ts)
+        return json.dumps(r)
+
+    write_lines(
+        tmp_path,
+        rec("a1", 1, "2026-03-01T10:00:01Z"),
+        rec("a2", 2, "2026-03-01T10:00:02Z"),
+        name="S.jsonl",
+    )
+    write_lines(
+        tmp_path,
+        rec("a1", 1, "2026-03-01T10:00:01Z"),
+        rec("a2", 2, "2026-03-01T10:00:02Z"),
+        rec("a3", 3, "2026-03-01T10:00:03Z"),
+        name="agent-x.jsonl",
+    )
+    (s,) = read_project(tmp_path)
+    assert [m.id for m in s.messages] == ["a1", "a2", "a3"]
+    assert [m.usage.output_tokens if m.usage else None for m in s.messages] == [None, None, 3]
+    assert sum(m.usage.output_tokens for m in s.messages if m.usage) == 3
 
 
 # -- read_project --------------------------------------------------------------------------
