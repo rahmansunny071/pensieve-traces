@@ -30,9 +30,9 @@ Install the optional extra to enable redaction: `pip install "pensieve-traces[re
 ```python
 from pensieve_traces import prepare_for_output, redact_session
 
-safe = prepare_for_output(session)                 # redacts by default; raises if teich is missing
-raw = prepare_for_output(session, redact=False)    # explicit opt-out, emits a UserWarning
-copy = redact_session(session)                     # scrubbed deep copy, input untouched
+safe = prepare_for_output(session)  # redacts by default; raises if teich is missing
+raw = prepare_for_output(session, redact=False)  # explicit opt-out, emits a UserWarning
+copy = redact_session(session)  # scrubbed deep copy, input untouched
 ```
 
 Writers must obtain their session through `prepare_for_output`. It never falls back to unredacted output: without the extra it raises `RedactionUnavailableError`. Ids, tool names, timestamps and usage are left as is. Redaction is pattern-based and best-effort, so review output before sharing.
