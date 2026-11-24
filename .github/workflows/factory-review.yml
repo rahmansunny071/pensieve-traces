@@ -18,6 +18,10 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: "/review-against-design ${{ github.event.pull_request.number }}"
+          # Implementation PRs are opened by the build agent (claude[bot]); the action refuses
+          # bot-initiated events unless the bot is listed. Safe here: same-repo factory/*
+          # branches only, and this agent's tools are read-only.
+          allowed_bots: "claude"
           claude_args: >-
             --model sonnet
             --max-turns 25
