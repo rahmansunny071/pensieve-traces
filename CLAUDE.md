@@ -16,6 +16,17 @@ input, private data leaks on realistic input, a hard-rule violation, or a test t
 everything else is filed as an `improvement` issue. Change this line to `hardening` before a first
 formal release.
 
+## Where knowledge lives
+- **GitHub and the repo are the source of truth:** issues, PRs, review threads, labels, plans and
+  implementation notes in `.factory/designs/`, and this file. Decisions and their reasons go here, where
+  the maintainer and every agent can see them.
+- **Each PR's "## Handoff" section** says what changed and why, the key decisions, how to test, and
+  what's open. Keep it current after every change, so the next agent or reviewer starts from it.
+- **The factory run log** (`.factory/runs/`, gitignored) is a local cache and cost ledger. It points at
+  PRs, commits and threads and never holds decisions.
+- **Questions for the maintainer** go on the PR as inline review comments, with options and a
+  recommendation. Work continues elsewhere until they're answered.
+
 ## Setup
 uv sync --locked --extra dev    # same lockfile CI uses
 
