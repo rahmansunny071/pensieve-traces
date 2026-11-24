@@ -63,6 +63,20 @@ sessions = read_project("path/to/project-dir")  # *.jsonl; subagent files merge 
 
 Records sharing a `requestId` stay separate messages; token usage is attached only to the last one so sums are not double-counted. Malformed input raises `ClaudeCodeParseError` with the file path and line number. The reader does no redaction.
 
+## Converting to STS
+
+`pensieve-traces convert` turns a Claude Code session file or project directory into [STS](https://huggingface.co/docs/hub/main/en/session-traces-format) JSONL for the Hugging Face trace viewer, one `<session id>.jsonl` per session (stdlib only):
+
+```bash
+pip install "pensieve-traces[redact]"
+pensieve-traces convert path/to/<project-dir> --to sts --out traces/
+```
+
+- Redaction is on by default. Without the `redact` extra the command exits with an error and writes nothing; pass `--no-redact` to write unredacted output (a warning is printed).
+- Sidechain (subagent) messages are skipped; add `--include-sidechains` to keep them.
+- Fields STS has no place for are dropped: parent ids, usage, request ids, `is_meta`/`is_error` flags, metadata, `cwd`, `project`, branch and session start/end times. Meta messages are still written.
+- From Python: `pensieve_traces.writers.sts.write_session(session, path)` and `session_to_sts_lines(session)` (the latter does not redact).
+
 ## How this repo is built: an agent factory
 
 Work happens through an issue-driven factory on Claude Code GitHub Actions. Agents write short designs, the maintainer signs off, then agents build, test and open PRs. Only the maintainer can start or advance work, merge to `main`, or publish anything.

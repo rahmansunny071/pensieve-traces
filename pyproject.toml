@@ -11,6 +11,9 @@ dependencies = []
 dev = ["pytest>=8"]
 redact = ["teich>=0.3.8,<0.4"]
 
+[project.scripts]
+pensieve-traces = "pensieve_traces.cli:main"
+
 [project.urls]
 Homepage = "https://sajjadur.net/"
 Repository = "https://github.com/rahmansunny071/pensieve-traces"

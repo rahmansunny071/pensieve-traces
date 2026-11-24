@@ -1,0 +1,6 @@
+{"type": "session", "harness": "claude_code", "id": "sess-sts", "name": "List the demo files"}
+{"type": "message", "message": {"role": "user", "content": "list the files", "timestamp": 1772359200123}}
+{"type": "message", "message": {"role": "assistant", "content": "Listing now.", "reasoningContent": "need a listing", "toolCalls": [{"id": "toolu_1", "function": {"name": "Bash", "arguments": "{\"command\": \"ls\"}"}}], "timestamp": 1772359201000, "model": "model-x"}}
+{"type": "message", "message": {"role": "tool", "content": "a.txt\nb.txt", "toolCallId": "toolu_1", "timestamp": 1772359202000}}
+{"type": "message", "message": {"role": "user", "content": "subagent task", "timestamp": 1772359202500}}
+{"type": "message", "message": {"role": "assistant", "content": "Two files: a.txt, b.txt.", "timestamp": 1772359203000, "model": "model-x"}}
