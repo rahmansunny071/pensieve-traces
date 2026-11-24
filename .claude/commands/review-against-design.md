@@ -17,6 +17,6 @@ You are the REVIEW agent for PR #$ARGUMENTS. Don't push commits.
      calls, workflows touched, unapproved or non-optional heavy dependencies,
      version bump)
    - **Spec conformance:** for writers, does the output match the cited spec?
-   - **Bugs / risky code:** specific, with file:line
+   - **Bugs / risky code:** specific, with file:line. Irreversible loss or overwrite of the user's existing data (source files, history, remote repos) on a plausible invocation, even a mistaken one, when a cheap guard would prevent it is must-fix.
    - **Verdict:** Ready for maintainer / Needs changes
 3. Keep it short. No style nits that ruff already enforces.

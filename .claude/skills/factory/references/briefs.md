@@ -147,8 +147,11 @@ draft PR <PR>), BEFORE any code is written. You didn't write it. Pass `-R <owner
 Read: the issue (`gh issue view <N> -R <owner/repo> --comments`), .factory/designs/issue-<N>.md,
 CLAUDE.md, and <the files the plan touches>. Judge: acceptance criteria met and nothing out of scope; the
 approach fits this codebase and the issues that depend on it; the test plan proves the criteria offline
-given what CI installs; hard rules respected and dependency changes named exactly; which open questions
-truly need the maintainer.
+given what CI installs; hard rules respected and dependency changes named exactly; if the code it plans
+writes, moves or deletes files at runtime where it could hit the user's existing data (source files,
+history, remote repos), the plan names its overwrite rules, so a plausible invocation, even a mistaken
+one, can't cause irreversible loss that a cheap guard would prevent (a plan that doesn't is a [change]);
+which open questions truly need the maintainer.
 
 Rules: don't add scope; if you suspect something is missing but can't verify it, it's a question, not a
 change. Nits go in notes. Post your findings as ONE review on the draft PR, with inline comments on the
@@ -180,7 +183,9 @@ maintainer answer implemented correctly, and did anything regress? Don't re-revi
 
 Release phase: <mvp | hardening>. Tag EVERY finding:
 - [blocker]: the main path breaks on realistic input; private data leaks on realistic input; a hard-rule
-  violation; or a test that claims to prove something it doesn't. Give an exact reproduction.
+  violation; irreversible loss or overwrite of the user's existing data (source files, history, remote
+  repos) on a plausible invocation, even a mistaken one, when a cheap guard would prevent it; or a test
+  that claims to prove something it doesn't. Give an exact reproduction.
 - [improvement]: everything else that would be better: crafted or adversarial inputs, robustness, polish,
   refactors, test gaps off the main path. In the mvp phase these never block the merge.
 - [question]: a decision only the maintainer can make (product behavior, naming they'd care about,

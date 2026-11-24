@@ -12,7 +12,9 @@ format-to-format directly.
 
 ## Release phase
 mvp. In mvp, only blockers are fixed inside a PR (the main path breaks on realistic
-input, private data leaks on realistic input, a hard-rule violation, or a test that falsely passes);
+input, private data leaks on realistic input, a hard-rule violation, irreversible loss or overwrite of
+the user's existing data (source files, history, remote repos) on a plausible invocation, even a
+mistaken one, when a cheap guard would prevent it, or a test that falsely passes);
 everything else is filed as an `improvement` issue. Change this line to `hardening` before a first
 formal release.
 
