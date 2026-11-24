@@ -12,8 +12,8 @@ Spec (confirmed): https://huggingface.co/docs/hub/main/en/session-traces-format.
 - Message line `{"type":"message","message":{...}}`: `role` (value), `content`=`text`, `reasoningContent`=`reasoning` (omitted if None), `toolCalls`=`[{"id","function":{"name","arguments"}}]` (omitted if empty; empty `arguments` becomes `"{}"`, otherwise kept verbatim as a string), `toolCallId` (tool messages only), `timestamp`=epoch ms int (omitted if None), `model` (omitted if None). Only those keys.
 - Not mapped, dropped: `parent_id` (STS is flat; model order kept), `usage`, `request_id`, `is_meta`, `is_error`, `is_sidechain`, message and session `metadata`, `cwd`, `project`, `git_branch`, `started_at`, `ended_at`. Nothing is moved into extra fields.
 - Sidechain messages are skipped unless `include_sidechains=True`.
-- NEW `pensieve_traces/cli.py`: stdlib `argparse`, `main(argv=None) -> int`. `pensieve-traces convert INPUT --to {sts} --out DIR [--no-redact] [--include-sidechains]`. `INPUT` file uses `read_session`; directory uses `read_project`. Output is `DIR/<session.id>.jsonl` (DIR is created; the id must match `[A-Za-z0-9._-]+` and not start with `.`, else exit 2 for that run before writing). Existing files are overwritten. A module-level `WRITERS: dict[str, Callable]` maps `--to` choices to writers, so #6 and later formats add one entry.
-- Redaction: on by default. If teich is missing, `write_session` raises `RedactionUnavailableError`; `convert` prints its install hint plus "or pass --no-redact to write unredacted output" to stderr, exits 2 and writes nothing (the first `write_session` call raises before opening its file, so nothing is written; the CLI only calls `write_session(..., redact=not args.no_redact)` and never redacts up front). `--no-redact` passes `redact=False`, which emits redact.py's `UserWarning`, and `convert` prints it to stderr. Redaction is never skipped silently.
+- NEW `pensieve_traces/cli.py`: stdlib `argparse`, `main(argv=None) -> int`. `pensieve-traces convert INPUT --to {sts} --out DIR [--no-redact] [--include-sidechains]`. `INPUT` file uses `read_session`; directory uses `read_project`. Output is `DIR/<session.id>.jsonl` (DIR is created; the id must match `[A-Za-z0-9._-]+` and not start with `.`, else exit 1 for that run before writing). Existing files are overwritten. A module-level `WRITERS: dict[str, Callable]` maps `--to` choices to writers, so #6 and later formats add one entry.
+- Redaction: on by default. If teich is missing, `write_session` raises `RedactionUnavailableError`; `convert` prints its install hint plus "or pass --no-redact to write unredacted output" to stderr, exits 1 and writes nothing (the first `write_session` call raises before opening its file, so nothing is written; the CLI only calls `write_session(..., redact=not args.no_redact)` and never redacts up front). `--no-redact` passes `redact=False`, which emits redact.py's `UserWarning`, and `convert` prints it to stderr. Redaction is never skipped silently.
 - pyproject.toml: add `[project.scripts] pensieve-traces = "pensieve_traces.cli:main"`. No new dependency; `dependencies` stays `[]`.
 
 ## Alternatives rejected
@@ -29,7 +29,7 @@ Spec (confirmed): https://huggingface.co/docs/hub/main/en/session-traces-format.
 Offline, synthetic only; reuse `tests/fixtures/claude_code/` (plain_chat, thinking, sidechain, tool results).
 - Golden: reader output on fixtures, mapped with a stub anonymizer or `redact=False`, compared line by line to `tests/fixtures/sts/*.jsonl`.
 - Unit: key sets exactly as above, camelCase, `arguments` is a str, timestamp is an int in ms, sidechain excluded and included, header first, empty arguments.
-- CLI via `main([...])`: one file per session, directory input, default redaction with injected fake `teich.anonymize` in `sys.modules`, missing teich gives exit 2, a stderr hint and no files, `--no-redact` warns, bad session id rejected.
+- CLI via `main([...])`: one file per session, directory input, default redaction with injected fake `teich.anonymize` in `sys.modules`, missing teich gives exit 1, a stderr hint and no files, `--no-redact` warns, bad session id rejected.
 - Real teich test with `pytest.importorskip("teich")`.
 
 ## Risks
@@ -44,3 +44,11 @@ Offline, synthetic only; reuse `tests/fixtures/claude_code/` (plain_chat, thinki
 
 ## Size estimate
 M
+
+## Implementation notes
+- Built as planned (PR #35): `pensieve_traces/writers/sts.py` (`session_to_sts_lines`, a pure mapper; `write_session`, which always goes through `prepare_for_output`) and `pensieve_traces/cli.py` (argparse subparsers; a `WRITERS` registry where every writer takes `(session, path, *, redact, include_sidechains)`; `[project.scripts] pensieve-traces`). No dependency changes.
+- Every CLI error (missing teich, bad session id, parse error, missing path, no `*.jsonl`) prints one stderr line and exits **1**. The plan originally said 2; corrected at review.
+- Session ids are validated before any file is written. `--no-redact` prints its own stderr warning, which can't be silenced by warning filters.
+- Dropped fields with no STS slot: parent ids, usage, request ids, `is_meta`, `is_error`, `is_sidechain`, metadata, cwd, project, branch, start and end times. `is_meta` messages are still emitted. Harness stays `claude_code`.
+- Design review: one change (rely on the `write_session` gate, never redact up front). Code review: READY, no blockers.
+- Follow-ups in #36: refuse `--out` equal to the input directory (it overwrites source files), partial output on failure, a stronger writer-level redaction test, surfacing `is_error`, and an `importlib.metadata` entry-point test.
