@@ -13,11 +13,14 @@ from pensieve_traces import upload as hub_upload
 from pensieve_traces.model import Session
 from pensieve_traces.readers.claude_code import ClaudeCodeParseError, read_project, read_session
 from pensieve_traces.redact import RedactionUnavailableError
-from pensieve_traces.writers import sts
+from pensieve_traces.writers import convomem, sts
 
 # Every writer has this signature; add one entry per ``--to`` target.
 Writer = Callable[..., None]
 WRITERS: dict[str, Writer] = {"sts": sts.write_session}
+# Aggregate targets write one set of files for all sessions rather than one file per session.
+CONVOMEM = "convomem-conversations"
+TARGETS = sorted([*WRITERS, CONVOMEM])
 
 _SAFE_ID = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]*")
 
@@ -56,9 +59,45 @@ def _check_out_dir(input_path: Path, out_dir: Path) -> None:
         )
 
 
+def _convert_convomem(args: argparse.Namespace, input_path: Path, sessions: list[Session]) -> None:
+    if args.include_sidechains:
+        raise CliError("--include-sidechains is not supported for convomem-conversations")
+    out_dir = Path(args.out)
+    _check_out_dir(input_path, out_dir)
+    targets = [out_dir / convomem.CONVERSATIONS_FILE, out_dir / convomem.MESSAGE_IDS_FILE]
+    existing = [str(p) for p in targets if p.exists()]
+    if existing:
+        raise CliError(
+            f"refusing to overwrite {', '.join(existing)}; "
+            "remove them or choose another --out directory"
+        )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        try:
+            paths = _write_convomem(sessions, out_dir, redact=not args.no_redact)
+        except RedactionUnavailableError as exc:
+            raise CliError(f"{exc}; or pass --no-redact to write unredacted output") from exc
+        except FileExistsError as exc:
+            raise CliError(str(exc)) from exc
+    for w in caught:
+        print(f"pensieve-traces: warning: {w.message}", file=sys.stderr)
+    for path in paths:
+        print(path)
+
+
+def _write_convomem(sessions: list[Session], out_dir: Path, *, redact: bool) -> tuple[Path, Path]:
+    # Like STS, the (empty) directory is created first; write_conversations redacts and builds
+    # everything before it opens a file, so a redaction failure leaves no output files.
+    out_dir.mkdir(parents=True, exist_ok=True)
+    return convomem.write_conversations(sessions, out_dir, redact=redact)
+
+
 def _convert(args: argparse.Namespace) -> None:
     input_path = Path(args.input)
     sessions = _load(input_path)
+    if args.to == CONVOMEM:
+        _convert_convomem(args, input_path, sessions)
+        return
     for session in sessions:
         if not _SAFE_ID.fullmatch(session.id):
             raise CliError(f"session id {session.id!r} cannot be used as a file name")
@@ -140,8 +179,12 @@ def _parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     conv = sub.add_parser("convert", help="convert session traces to a shareable format")
     conv.add_argument("input", help="a session .jsonl file or a project directory")
-    conv.add_argument("--to", required=True, choices=sorted(WRITERS), help="output format")
-    conv.add_argument("--out", required=True, help="output directory (one file per session)")
+    conv.add_argument("--to", required=True, choices=TARGETS, help="output format")
+    conv.add_argument(
+        "--out",
+        required=True,
+        help="output directory (sts: one file per session; convomem-conversations: two files)",
+    )
     conv.add_argument(
         "--no-redact",
         action="store_true",

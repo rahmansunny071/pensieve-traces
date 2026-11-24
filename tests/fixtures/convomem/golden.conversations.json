@@ -1,0 +1,44 @@
+{
+  "evidence_items": [
+    {
+      "conversations": [
+        {
+          "id": "sess-early",
+          "containsEvidence": false,
+          "messages": [
+            {
+              "speaker": "User",
+              "text": "earlier question"
+            },
+            {
+              "speaker": "Assistant",
+              "text": "earlier answer"
+            }
+          ]
+        },
+        {
+          "id": "sess-late",
+          "containsEvidence": false,
+          "messages": [
+            {
+              "speaker": "User",
+              "text": "hello there"
+            },
+            {
+              "speaker": "Assistant",
+              "text": "Checking the repo.\n[ran Bash: git status]"
+            },
+            {
+              "speaker": "Assistant",
+              "text": "[ran Read]"
+            },
+            {
+              "speaker": "Assistant",
+              "text": "All clean."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

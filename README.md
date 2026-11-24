@@ -8,7 +8,7 @@ Claude Code (and other agents) record every session as raw JSONL. Those files ho
 |---|---|---|
 | **STS** | Hugging Face [Session Trace Simple Format](https://huggingface.co/docs/hub/main/en/session-traces-format): one JSONL file per session, viewable on the Hub as an [agent trace](https://huggingface.co/docs/hub/main/en/agent-traces) | planned |
 | **OpenRouter Broadcast** | One JSON file per model request, with tokens and cost | planned |
-| **ConvoMem conversations** | Sessions as `{id, messages[{speaker, text}]}` conversations, one persona per project, ready to be used as history or filler | planned |
+| **ConvoMem conversations** | Sessions as `{id, messages[{speaker, text}]}` conversations, one persona per project, ready to be used as history or filler | available (`convert --to convomem-conversations`) |
 | **ConvoMem dataset** | Questions, answers and evidence pointers generated from a project's sessions, in the [ConvoMem](https://huggingface.co/datasets/Salesforce/ConvoMem) layout, runnable with [convomem-arena](https://github.com/rahmansunny071/convomem-arena) | planned |
 
 ```
@@ -77,6 +77,21 @@ pensieve-traces convert path/to/<project-dir> --to sts --out traces/
 - Sidechain (subagent) messages are skipped; add `--include-sidechains` to keep them.
 - Fields STS has no place for are dropped: parent ids, usage, request ids, `is_meta`/`is_error` flags, metadata, `cwd`, `project`, branch and session start/end times. Meta messages are still written.
 - From Python: `pensieve_traces.writers.sts.write_session(session, path)` and `session_to_sts_lines(session)` (the latter does not redact).
+
+## Converting to ConvoMem conversations
+
+`pensieve-traces convert --to convomem-conversations` exports a project's sessions as [ConvoMem](https://huggingface.co/datasets/Salesforce/ConvoMem)-style conversations (one session per conversation, ordered by start time), loadable by [convomem-arena](https://github.com/rahmansunny071/convomem-arena):
+
+```bash
+pensieve-traces convert path/to/<project-dir> --to convomem-conversations --out convomem/
+```
+
+`--out` is a directory and receives two files:
+
+- `conversations.json`: `{"evidence_items": [{"conversations": [{"id", "containsEvidence", "messages": [{"speaker", "text"}]}]}]}` (the filler-file layout; `id` is the session id, speakers are `User` / `Assistant`).
+- `conversations.message_ids.json`: `{conversation id: [canonical message id, ...]}`, index-aligned with each conversation's `messages`, so Q/A generation can point evidence at exact messages.
+
+Only user prompts and assistant prose are kept; meta, sidechain, system and tool-result messages and empty turns are dropped. Assistant tool calls become one-line `[ran Bash: git status]` summaries (from Python, `tool_activity="drop"` omits them). Redaction is on by default, as for STS, and one anonymizer covers all sessions. The command refuses (writing nothing) if either output file already exists or `--out` would overwrite the input sessions. From Python: `pensieve_traces.writers.convomem.write_conversations(sessions, out_dir)`, and `sessions_to_conversations(sessions)` / `sessions_to_conversations_with_ids(sessions)` (no redaction).
 
 ## Uploading to the Hub
 

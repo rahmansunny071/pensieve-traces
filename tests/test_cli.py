@@ -167,3 +167,70 @@ def test_real_teich_redacts(tmp_path: Path) -> None:
     assert run(str(src), "--to", "sts", "--out", str(tmp_path / "o")) == 0
     out = (tmp_path / "o" / "sess-sts.jsonl").read_text()
     assert "jdoe.private@corp-mail.io" not in out
+
+
+CONVOMEM = FIX / "convomem"
+
+
+def test_convomem_writes_both_files_redacted(tmp_path: Path, fake_teich: None) -> None:
+    out = tmp_path / "out"
+    assert run(str(CONVOMEM), "--to", "convomem-conversations", "--out", str(out)) == 0
+    assert sorted(p.name for p in out.iterdir()) == [
+        "conversations.json",
+        "conversations.message_ids.json",
+    ]
+    payload = json.loads((out / "conversations.json").read_text())
+    convs = payload["evidence_items"][0]["conversations"]
+    assert [c["id"] for c in convs] == ["sess-early", "sess-late"]
+    assert convs[0]["messages"][0]["text"] == "EARLIER QUESTION"
+    ids = json.loads((out / "conversations.message_ids.json").read_text())
+    assert ids["sess-early"] == ["e1", "e2"]
+
+
+def test_convomem_existing_output_refused(
+    tmp_path: Path, fake_teich: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "conversations.message_ids.json").write_text("keep")
+    args = (str(CONVOMEM), "--to", "convomem-conversations", "--out", str(tmp_path))
+    assert run(*args) == 1
+    assert "refusing to overwrite" in capsys.readouterr().err
+    assert (tmp_path / "conversations.message_ids.json").read_text() == "keep"
+    assert not (tmp_path / "conversations.json").exists()
+
+
+def test_convomem_out_in_input_dir_refused(
+    tmp_path: Path, fake_teich: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    src = tmp_path / "in"
+    shutil.copytree(CONVOMEM, src)
+    assert run(str(src), "--to", "convomem-conversations", "--out", str(src)) == 1
+    assert "input directory" in capsys.readouterr().err
+    assert not (src / "conversations.json").exists()
+
+
+def test_convomem_missing_teich_fails_cleanly(
+    tmp_path: Path, no_teich: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = tmp_path / "out"
+    assert run(str(CONVOMEM), "--to", "convomem-conversations", "--out", str(out)) == 1
+    err = capsys.readouterr().err
+    assert "pensieve-traces[redact]" in err and "--no-redact" in err
+    assert list(out.iterdir()) == []
+
+
+def test_convomem_no_redact_warns(
+    tmp_path: Path, no_teich: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    args = (str(CONVOMEM), "--to", "convomem-conversations", "--out", str(tmp_path), "--no-redact")
+    assert run(*args) == 0
+    assert "Redaction disabled" in capsys.readouterr().err
+    assert "earlier question" in (tmp_path / "conversations.json").read_text()
+
+
+def test_convomem_rejects_sidechains_flag(
+    tmp_path: Path, fake_teich: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    args = (str(CONVOMEM), "--to", "convomem-conversations", "--out", str(tmp_path / "o"))
+    assert run(*args, "--include-sidechains") == 1
+    assert "--include-sidechains" in capsys.readouterr().err
+    assert not (tmp_path / "o").exists()
