@@ -15,9 +15,11 @@ Id and parent contract
     that yields no blocks yields no message. Repeated record uuids are skipped (debug log).
 
 Usage contract
-    Assistant records sharing a ``requestId`` stay separate messages. ``message.usage`` is
-    attached only to the last message of each ``requestId`` group; the others get ``None``,
-    so summing usage across messages gives the per-request total. Key mapping:
+    Assistant records sharing a ``requestId`` stay separate messages. For each ``requestId``,
+    the usage of the last assistant record in file order (including records that produce no
+    message) is put on the last assistant message of that group; every other message in the
+    group has no usage. If the group produced no messages, its usage is dropped (debug log).
+    Summing usage across messages gives the per-request total. Key mapping:
     ``input_tokens`` -> ``input_tokens``, ``output_tokens`` -> ``output_tokens``,
     ``cache_read_input_tokens`` -> ``cache_read_tokens``,
     ``cache_creation_input_tokens`` -> ``cache_creation_tokens``. Missing or null counts are
@@ -73,6 +75,7 @@ class _ParsedFile:
     git_branch: str | None = None
     title: str | None = None
     messages: list[Message] = field(default_factory=list)
+    record_uuids: list[str] = field(default_factory=list)  # parallel to messages
 
 
 def _join(parts: list[str]) -> str:
@@ -88,6 +91,8 @@ class _FileParser:
         self._seen_uuids: set[str] = set()
         self._seen_ids: set[str] = set()
         self._pending: list[tuple[Message, Usage | None]] = []
+        self._record_uuids: list[str] = []
+        self._request_usage: dict[str, Usage | None] = {}
 
     def fail(self, reason: str) -> ClaudeCodeParseError:
         return ClaudeCodeParseError(self.path, self.line, reason)
@@ -105,6 +110,7 @@ class _FileParser:
         if self._session_id is not None:
             self.parsed.session_id = self._session_id
         self.parsed.messages = [m for m, _ in self._pending]
+        self.parsed.record_uuids = self._record_uuids
         return self.parsed
 
     # -- records ---------------------------------------------------------
@@ -126,7 +132,7 @@ class _FileParser:
                     "%s:%d: ignoring ai-title without a string aiTitle", self.path, self.line
                 )
             return
-        if rtype not in _KEPT_TYPES:
+        if not isinstance(rtype, str) or rtype not in _KEPT_TYPES:
             logger.debug("%s:%d: skipping record of type %r", self.path, self.line, rtype)
             return
         self._kept(rec, rtype)
@@ -167,10 +173,14 @@ class _FileParser:
                 parts = self._assistant_parts(blocks)
                 usage = self._usage(message.get("usage"))
                 model = message["model"] if isinstance(message.get("model"), str) else None
+        request_id = rec.get("requestId")
+        if rtype == "assistant" and isinstance(request_id, str):
+            # Last assistant record of the group wins, even if it yields no message.
+            self._request_usage[request_id] = usage
+            usage = None
         if not parts:
             return
 
-        request_id = rec.get("requestId")
         common: dict[str, Any] = {
             "timestamp": timestamp,
             "model": model,
@@ -186,6 +196,7 @@ class _FileParser:
             self._seen_ids.add(mid)
             msg = Message(id=mid, parent_id=prev, **common, **kwargs)
             self._pending.append((msg, usage if msg.role is Role.ASSISTANT else None))
+            self._record_uuids.append(uuid)
             prev = mid
 
     # -- field helpers ---------------------------------------------------
@@ -298,16 +309,25 @@ class _FileParser:
         ]
 
     def _attach_usage(self) -> None:
-        # Usage goes only on the last message of each requestId group (see module docstring).
-        seen: set[str] = set()
-        for msg, usage in reversed(self._pending):
-            if msg.role is not Role.ASSISTANT:
-                continue
-            if msg.request_id is None:
+        # Per requestId: the last assistant record's usage goes on the group's last assistant
+        # message; other messages get None (see module docstring). Messages without a
+        # requestId keep their own record's usage (set in _kept).
+        last: dict[str, Message] = {}
+        for msg, _ in self._pending:
+            if msg.role is Role.ASSISTANT and msg.request_id is not None:
+                last[msg.request_id] = msg
+        for msg, usage in self._pending:
+            if msg.role is Role.ASSISTANT and msg.request_id is None:
                 msg.usage = usage
-            elif msg.request_id not in seen:
-                seen.add(msg.request_id)
-                msg.usage = usage
+        for request_id, usage in self._request_usage.items():
+            if request_id in last:
+                last[request_id].usage = usage
+            else:
+                logger.debug(
+                    "%s: dropping usage of requestId %r: no messages in group",
+                    self.path,
+                    request_id,
+                )
 
 
 def _nonempty_str(value: Any) -> bool:
@@ -337,12 +357,16 @@ def _build_session(session_id: str, files: list[_ParsedFile]) -> Session:
     messages: list[Message] = []
     seen: set[str] = set()
     for parsed in files:
-        for msg in parsed.messages:
-            if msg.id in seen:
-                logger.debug("%s: skipping repeated message id %r", parsed.path, msg.id)
+        file_uuids: set[str] = set()
+        for msg, uuid in zip(parsed.messages, parsed.record_uuids, strict=True):
+            if uuid in seen:
+                logger.debug(
+                    "%s: skipping message %r of repeated uuid %r", parsed.path, msg.id, uuid
+                )
                 continue
-            seen.add(msg.id)
+            file_uuids.add(uuid)
             messages.append(msg)
+        seen |= file_uuids
     if len(files) > 1:
         # Stable: file order breaks ties; untimestamped messages go last.
         messages.sort(key=lambda m: (m.timestamp is None, m.timestamp))

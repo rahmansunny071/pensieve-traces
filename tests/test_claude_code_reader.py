@@ -303,6 +303,84 @@ def test_missing_usage_keys_default_to_zero(tmp_path):
     assert read_session(p).messages[0].usage == Usage()
 
 
+def _req_asst(uuid, parent, content, out, rid="req-1"):
+    rec = asst_rec(uuid, usage={"output_tokens": out}, requestId=rid, parentUuid=parent)
+    rec["message"]["content"] = content
+    return json.dumps(rec)
+
+
+@pytest.mark.parametrize(
+    "last_content",
+    [
+        [{"type": "redacted_thinking", "data": "xx"}],
+        [{"type": "mystery_block", "foo": 1}],
+    ],
+)
+def test_usage_of_message_less_last_record_lands_on_last_message(tmp_path, last_content):
+    p = write_lines(
+        tmp_path,
+        _req_asst("a1", None, [{"type": "text", "text": "one"}], 1),
+        _req_asst("a2", "a1", [{"type": "text", "text": "two"}], 2),
+        _req_asst("a3", "a2", last_content, 9),
+    )
+    s = read_session(p)
+    assert [m.id for m in s.messages] == ["a1", "a2"]
+    assert s.messages[0].usage is None
+    assert s.messages[1].usage == Usage(output_tokens=9)
+
+
+def test_usage_dropped_when_group_has_no_messages(tmp_path, caplog):
+    p = write_lines(
+        tmp_path,
+        _req_asst("a1", None, [{"type": "redacted_thinking", "data": "xx"}], 4),
+        json.dumps(user_rec("u1")),
+    )
+    with caplog.at_level(logging.DEBUG, logger=LOGGER):
+        s = read_session(p)
+    assert [m.id for m in s.messages] == ["u1"]
+    assert "dropping usage" in caplog.text
+
+
+@pytest.mark.parametrize("rtype", [["user"], {"a": 1}])
+def test_non_string_record_type_is_skipped(tmp_path, caplog, rtype):
+    p = write_lines(tmp_path, json.dumps({"type": rtype}), json.dumps(user_rec("u1")))
+    with caplog.at_level(logging.DEBUG, logger=LOGGER):
+        s = read_session(p)
+    assert [m.id for m in s.messages] == ["u1"]
+    assert "skipping record of type" in caplog.text
+
+
+def test_user_record_with_text_and_two_tool_results(tmp_path):
+    rec = user_rec("u2", parentUuid="a1")
+    rec["message"]["content"] = [
+        {"type": "text", "text": "note"},
+        {"type": "tool_result", "tool_use_id": "c1", "content": "r1"},
+        {"type": "tool_result", "tool_use_id": "c2", "content": "r2"},
+    ]
+    s = read_session(write_lines(tmp_path, json.dumps(rec)))
+    assert seq(s) == [
+        ("u2#0", "user", "a1", "note"),
+        ("u2#1", "tool", "u2#0", "r1"),
+        ("u2", "tool", "u2#1", "r2"),
+    ]
+    assert [m.tool_call_id for m in s.messages] == [None, "c1", "c2"]
+
+
+def test_cross_file_repeated_record_skips_all_derived_messages(tmp_path):
+    first = user_rec("u1", sessionId="S")
+    first["timestamp"] = "2026-03-01T10:00:00Z"
+    again = user_rec("u1", sessionId="S")
+    again["timestamp"] = "2026-03-01T10:00:00Z"
+    again["message"]["content"] = [
+        {"type": "text", "text": "later copy"},
+        {"type": "tool_result", "tool_use_id": "c1", "content": "r1"},
+    ]
+    write_lines(tmp_path, json.dumps(first), name="a.jsonl")
+    write_lines(tmp_path, json.dumps(again), name="b.jsonl")
+    (s,) = read_project(tmp_path)
+    assert [(m.id, m.text) for m in s.messages] == [("u1", "hi")]
+
+
 # -- read_project --------------------------------------------------------------------------
 
 PROJECT = FIX / "project"
