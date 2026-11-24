@@ -1,0 +1,5 @@
+{"type": "user", "uuid": "u1", "parentUuid": null, "sessionId": "sess-plain", "timestamp": "2026-03-01T10:00:00.000Z", "cwd": "/work/demo", "gitBranch": "main", "isSidechain": false, "message": {"role": "user", "content": [{"type": "text", "text": "hello there"}]}}
+{"type": "assistant", "uuid": "a1", "parentUuid": "u1", "sessionId": "sess-plain", "timestamp": "2026-03-01T10:00:01.000Z", "cwd": "/work/demo", "gitBranch": "main", "isSidechain": false, "requestId": "req-1", "message": {"role": "assistant", "model": "model-x", "content": [{"type": "text", "text": "hi, how can I help?"}], "usage": {"input_tokens": 10, "output_tokens": 5, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0, "service_tier": "standard"}}}
+{"type": "ai-title", "sessionId": "sess-plain", "aiTitle": "Greeting"}
+{"type": "ai-title", "sessionId": "sess-plain", "aiTitle": "Better greeting"}
+{"type": "user", "uuid": "u2", "parentUuid": "a1", "sessionId": "sess-plain", "timestamp": "2026-03-01T10:00:02.000Z", "cwd": "/work/demo", "gitBranch": "main", "isSidechain": false, "message": {"role": "user", "content": [{"type": "text", "text": "thanks"}]}}
