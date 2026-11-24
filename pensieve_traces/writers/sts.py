@@ -4,7 +4,9 @@ Spec: https://huggingface.co/docs/hub/main/en/session-traces-format (how the Hub
 traces: https://huggingface.co/docs/hub/main/en/agent-traces).
 
 The output is JSONL. The first line is the session header (``type``, ``harness``, ``id`` and,
-when the session has a title, ``name``); every other line is
+when the session has a title, ``name``); :func:`write_session` also adds the extra header key
+``pensieveRedacted`` (bool: whether redaction ran), which the spec allows on the header line and
+``pensieve-traces upload`` reads. This reverses #4's "no extra header keys" decision. Every other line is
 ``{"type": "message", "message": {...}}`` holding only the spec's message keys: ``role``,
 ``content``, ``reasoningContent``, ``toolCalls``, ``toolCallId``, ``timestamp`` (epoch
 milliseconds) and ``model``. Optional keys are omitted when empty.
@@ -56,8 +58,13 @@ def _message_dict(msg: Message) -> dict[str, Any]:
     return out
 
 
-def session_to_sts_lines(session: Session, *, include_sidechains: bool = False) -> list[dict]:
-    """Map ``session`` to STS lines (header first). Does not redact."""
+def session_to_sts_lines(
+    session: Session, *, include_sidechains: bool = False, redacted: bool | None = None
+) -> list[dict]:
+    """Map ``session`` to STS lines (header first). Does not redact.
+
+    ``redacted`` sets the header key ``pensieveRedacted``; ``None`` omits it.
+    """
     header: dict[str, Any] = {
         "type": "session",
         "harness": session.harness or "unknown",
@@ -65,6 +72,8 @@ def session_to_sts_lines(session: Session, *, include_sidechains: bool = False) 
     }
     if session.title is not None:
         header["name"] = session.title
+    if redacted is not None:
+        header["pensieveRedacted"] = redacted
     lines = [header]
     for msg in session.messages:
         if msg.is_sidechain and not include_sidechains:
@@ -87,6 +96,6 @@ def write_session(
     redaction is on and teich is not installed.
     """
     prepared = prepare_for_output(session, redact=redact, anonymizer=anonymizer)
-    lines = session_to_sts_lines(prepared, include_sidechains=include_sidechains)
+    lines = session_to_sts_lines(prepared, include_sidechains=include_sidechains, redacted=redact)
     with open(path, "w", encoding="utf-8", newline="\n") as fh:
         fh.writelines(json.dumps(line, ensure_ascii=False) + "\n" for line in lines)

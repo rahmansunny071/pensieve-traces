@@ -548,16 +548,20 @@ source = { editable = "." }
 dev = [
     { name = "pytest" },
 ]
+hub = [
+    { name = "huggingface-hub" },
+]
 redact = [
     { name = "teich" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "huggingface-hub", marker = "extra == 'hub'", specifier = ">=1.0,<3" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
     { name = "teich", marker = "extra == 'redact'", specifier = ">=0.3.8,<0.4" },
 ]
-provides-extras = ["dev", "redact"]
+provides-extras = ["dev", "redact", "hub"]
 
 [[package]]
 name = "pluggy"
