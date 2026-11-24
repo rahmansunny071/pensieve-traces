@@ -2,7 +2,7 @@
 name: factory
 description: >-
   Run this repo's agent factory end to end from Claude Code. Brainstorm a feature or roadmap with the
-  maintainer and turn it into detailed, dependency-linked GitHub issues; then take each ready issue from
+  maintainer and turn it into prioritized swim lanes of ordered, dependency-linked GitHub issues; then take each ready issue from
   plan to merged PR with a Sonnet builder and a fresh Opus reviewer, fixing only what blocks the main path
   and filing the rest as improvements. Questions for the maintainer go on the PR as inline comments while
   the run continues; "resume" picks up their answers. Use this whenever the user wants to plan or break
@@ -29,6 +29,10 @@ Three principles shape everything below. All of them came out of real runs:
 3. **Flag and continue.** When the maintainer must decide something, put the question on the PR, label
    it, and move on to other work. Never block the run waiting for an answer, unless nothing else can
    proceed.
+4. **Lanes give the work its shape.** A **lane** is a feature or swim lane: a parent issue labelled
+   `lane` whose native GitHub **sub-issues, in order**, are processed one at a time. Independent lanes
+   can run in parallel. Priorities (`P0`–`P3`) rank lanes and issues; native **"blocked by"** links
+   (and the body's "Depends on #N" line as a fallback) express dependencies between issues or whole lanes.
 
 ## Where knowledge lives
 
@@ -57,29 +61,55 @@ When the run log or memory disagrees with GitHub, GitHub wins.
    long, finish the current step, write the run summary and suggest a fresh session. GitHub and the run
    log let it pick up cleanly.
 
-## Mode 1: Brainstorm → issues
+## Mode 1: Brainstorm → lanes → issues
 
-1. **Brainstorm with the user yourself** (Opus, main session): goals, users, constraints, out of scope,
-   how they'll know it works. Read the code it touches. Identify the **main path**, the smallest chain of
-   issues that makes the thing work end to end, and order it first.
-2. **Propose a breakdown table:** slug, title, one-line goal, dependencies (main-path only; never make a
-   main-path issue wait on a polish issue), areas, size (S/M; split anything L), **risk tier** (see below).
-   Mark polish and hardening items as `improvement`.
-3. **Get one confirmation** ("create these N issues?"), because issues are visible to others. This is a
-   live conversation, so asking in the session is right here.
-4. **Draft bodies.** For several issues, spawn one Sonnet "Issue writer" per issue in parallel
-   (`references/briefs.md`). For one or two small issues, write them yourself.
-5. **Check and create, in dependency order** (`references/issue-format.md`), replacing `{{slug}}` with
-   real `#N`. Apply the `improvement` label where it belongs.
+A two-level conversation with the maintainer (you, Opus, in the main session), then one confirmation.
+
+1. **Ideate the lanes.** Goals, users, constraints, out of scope, how they'll know it works. Read the code it
+   touches. Group the work into **lanes**: coherent features or swim lanes that one builder could carry
+   from start to finish. For each lane, agree on:
+   - **priority** (`P0` must-have now … `P3` later): which lanes matter most;
+   - **lane dependencies:** does a lane need another lane (or one issue in it) finished first? Keep them
+     minimal, because every dependency removes parallelism;
+   - which lane is the **main path** (the smallest chain that makes the thing work end to end). It's `P0`.
+2. **Break each lane into ordered issues.** The order within a lane is the processing order, so dependencies
+   come first, then priority. Use **rolling-wave** detail: fully write only the **next one or two issues per
+   lane**; later ones are short stubs that get detailed when they come close. Polish and hardening go in a
+   low-priority lane (or carry the `improvement` label at the end of their lane).
+3. **Show the plan as a lane table:** lane, priority, lane dependencies, then its issues in order (slug,
+   title, one-line goal, size S/M, risk tier, issue-level dependencies across lanes). Point out which lanes
+   could run in parallel.
+4. **Get one confirmation** ("create these N lanes and M issues?"). Issues are visible to others, so ask in
+   the session here.
+5. **Create, in this order:**
+   - the lane issues (label `lane`, its `P` label, body: goal, scope, the ordered list, lane dependencies);
+   - the issue bodies (several: spawn Sonnet "Issue writers" in parallel; one or two: write them yourself),
+     created in dependency order, replacing `{{slug}}` with real `#N`;
+   - then wire it with `scripts/lanes.py`: `priority` on every issue, `sub-add <lane> <issues in order>`,
+     `block <issue> --by <issue>` for every dependency (lane-level ones on the lane issue), and
+     `project-add … --project <N>` if the repo has a factory Project board (see `CLAUDE.md` or `gh project
+     list`).
+   Check with `queue.py` that the lanes, order and dependencies come out as agreed.
 
 ## Mode 2: Run the factory
 
 ### Pick the work
 
-`queue.py` lists, in order: issues in progress, issues **waiting on the maintainer with new replies**
-(resume those first), ready main-path issues, then ready `improvement` issues. **At most two issues in
-flight; merges are always one at a time.** Issues waiting on the maintainer without new replies don't
-count as in flight. Leave them, and leave anything that depends on them.
+`queue.py` shows every lane with its **current issue** (the first open sub-issue) and that issue's state.
+Lanes are ranked by priority, and the table ends with **"Work now"** for the given number of lanes in
+parallel (`--lanes`, default **1**). Issues not in any lane are listed separately.
+
+- **One lane at a time by default.** When `queue.py` says **"More lanes ready … ask the maintainer"**, ask
+  once per run (in the session, at the start): "Lanes #A and #B are both ready. Run them in parallel?"
+  Use their answer as `--lanes` for the rest of the run. Never raise it on your own.
+- **Within a lane, strictly in order.** Take the current issue; when it merges, the next sub-issue
+  becomes current. Don't skip ahead inside a lane, even if a later issue looks ready. If the order seems
+  wrong, raise it with the maintainer (`scripts/lanes.py order` fixes it).
+- **Lanes that answered first.** A lane whose current issue the maintainer has replied on (`replied`) goes
+  before starting new work. A lane that's `asked` is paused and uses no slot; resume it when they reply.
+- **Collision guard.** Before starting a second lane's issue, compare its plan's "Files & interfaces
+  touched" with the files the other active lane is changing. If they overlap, hold it and say so.
+- **Merges are always one at a time**, whatever the number of lanes.
 
 ### Risk tiers
 
@@ -148,7 +178,8 @@ When the maintainer has to decide something, don't wait in the session:
    that aren't about one line go in a single PR comment.
 2. Add `factory:needs-maintainer` to the **issue and the PR**. Remove the in-progress label.
 3. Log a `needs-maintainer` step with the thread ids in `refs`.
-4. **Move on** to the next independent ready issue. Anything that depends on this issue waits.
+4. **Move on.** This pauses only **this lane**: its later issues wait. Other lanes, and anything that
+   doesn't depend on this issue, carry on.
 
 Ask in the session (`AskUserQuestion`) **only** if nothing else can proceed and the maintainer is clearly
 present. Even then, put the question and the answer on the PR too, so the record is complete.
@@ -186,13 +217,14 @@ the run log only speeds this up.
 If the maintainer used `@claude` on the PR (the Actions `factory-chat` workflow), its commits are already
 there: treat them like a builder's changes and check them.
 
-### Overlapping issues
+### Parallel lanes
 
-While issue A builds, waits for CI, or waits on the maintainer, you may start the **plan** of an
-independent ready issue B (no dependency either way, and no files A is changing), in its own worktree with
-its own builder. Keep at most two issues **actively in flight**, and merge one at a time. After A merges,
-update B's branch with `main` (`gh api -X PUT repos/<owner/repo>/pulls/<PR>/update-branch`) before B's
-review.
+With `--lanes 1` (the default) there's no overlap: one lane's current issue at a time; while it waits on the
+maintainer, the next lane in the queue may start, since a paused lane uses no slot. With the maintainer's OK
+for `--lanes N`, up to N lanes are **active** at once, each with **its own worktree and its own builder**,
+after the collision guard. Merge one at a time; after each merge, update every other active lane's branch
+with `main` (`gh api -X PUT repos/<owner/repo>/pulls/<PR>/update-branch`) before its review, so it's
+reviewed against current code.
 
 ### Reality check
 
@@ -229,6 +261,8 @@ template as a `lesson` issue.
   format.
 - `references/gates.md`: merge gates (including all threads resolved), bounded CI waits, posting and
   resolving review threads, and the merge command.
-- `scripts/queue.py`: the queue (in progress, waiting on the maintainer and replied, ready; main path
-  first).
+- `scripts/queue.py`: the lane-aware queue (each lane's current issue and state, "Work now" for
+  `--lanes N`, issues outside lanes).
+- `scripts/lanes.py`: create and maintain lanes with native GitHub features (`sub-add`, `order`, `block`,
+  `priority`, `project-add`, `show`).
 - `scripts/runlog.py`: the run log (`add`, `status`, `summary`).

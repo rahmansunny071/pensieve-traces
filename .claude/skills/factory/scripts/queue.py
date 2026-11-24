@@ -1,21 +1,25 @@
 """Factory work queue: what to do next, worked out from GitHub (the source of truth).
 
-States, in the order the orchestrator should handle them:
-- in-progress: labelled factory:designing / factory:building / factory:review.
-- needs-maintainer (replied): labelled factory:needs-maintainer, and the maintainer has answered on the
-  PR since the factory last spoke. Resume these first.
-- ready: open, every issue on its "Depends on #A, #B" line is closed, no factory label. Main-path
-  issues come before issues labelled `improvement`.
-- needs-maintainer (waiting): asked, not answered yet. Leave it, and anything that depends on it.
-- blocked: labelled factory:blocked.
-- waiting: open dependencies.
+Work is organised in **lanes**: parent issues labelled `lane` whose native GitHub sub-issues are the
+lane's issues, **in order**. Lanes run in parallel (up to --lanes, default 1); inside a lane, issues run
+one at a time in sub-issue order. Priority labels P0–P3 rank lanes (and issues outside lanes); a missing
+label counts as P2. Dependencies are native "blocked by" links plus "Depends on #N" lines in the body
+(fallback). A lane that is blocked by another issue waits as a whole.
 
-Reads issues and PRs with `gh` (stdlib only). The maintainer is the logged-in `gh` user unless
---maintainer is given.
+Per lane, the state of its **current** issue (the first open sub-issue) decides the lane's state:
+- active: labelled factory:designing / factory:building / factory:review (uses a slot)
+- replied: factory:needs-maintainer and the maintainer has answered (resume it; uses a slot)
+- ready: nothing blocks it (can start if a slot is free)
+- asked: factory:needs-maintainer, no answer yet (paused; doesn't use a slot)
+- blocked: factory:blocked
+- waiting: open dependencies (its own or the lane's)
 
-    python .claude/skills/factory/scripts/queue.py            # table
-    python .claude/skills/factory/scripts/queue.py --json     # machine-readable
-    python .claude/skills/factory/scripts/queue.py --offline  # skip the reply check (issues only)
+Issues not in any lane are listed separately with the same states (repos without lanes keep working).
+
+    python .claude/skills/factory/scripts/queue.py              # table
+    python .claude/skills/factory/scripts/queue.py --lanes 2    # plan for two lanes in parallel
+    python .claude/skills/factory/scripts/queue.py --json
+    python .claude/skills/factory/scripts/queue.py --offline    # skip reply/dependency API calls
     python .claude/skills/factory/scripts/queue.py --self-test
 """
 
@@ -32,24 +36,42 @@ IN_PROGRESS = ("factory:designing", "factory:building", "factory:review")
 NEEDS_MAINTAINER = "factory:needs-maintainer"
 BLOCKED = "factory:blocked"
 IMPROVEMENT = "improvement"
+LANE = "lane"
+_PRIORITY = re.compile(r"^P([0-3])$")
 _DEPENDS_LINE = re.compile(r"^\W*depends on\b(?P<rest>.*)$", re.IGNORECASE | re.MULTILINE)
 _ISSUE_REF = re.compile(r"(?<![\w/])#(\d+)\b")
+_CLOSES = re.compile(r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)\b", re.IGNORECASE)
 # (PR number, maintainer replied?). An alias, so no type hint ends in a double "]".
 ReplyInfo = tuple[int, bool]
-_CLOSES = re.compile(r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)\b", re.IGNORECASE)
 
 
 @dataclass
-class Item:
+class Issue:
     number: int
     title: str
-    state: str  # in-progress | needs-maintainer | ready | blocked | waiting
-    depends_on: list[int] = field(default_factory=list)
+    state: str  # active | replied | ready | asked | blocked | waiting
+    priority: int = 2
     open_dependencies: list[int] = field(default_factory=list)
-    labels: list[str] = field(default_factory=list)
     improvement: bool = False
     pr: int | None = None
-    replied: bool | None = None  # needs-maintainer only; None when not checked
+
+
+@dataclass
+class Lane:
+    number: int
+    title: str
+    priority: int
+    state: str  # same states as its current issue; "done" when no open sub-issues
+    current: Issue | None = None
+    remaining: list[int] = field(default_factory=list)  # open sub-issues after the current one
+    lane_dependencies: list[int] = field(default_factory=list)
+
+
+# Aliases, so no type hint ends in two closing brackets in a row (the template CI flags
+# that as leftover template syntax).
+IntList = list[int]
+LaneList = list[Lane]
+IssueList = list[Issue]
 
 
 def dependencies(body: str) -> list[int]:
@@ -60,13 +82,19 @@ def dependencies(body: str) -> list[int]:
     return list(dict.fromkeys(found))
 
 
+def priority(labels: list[str]) -> int:
+    for label in labels:
+        m = _PRIORITY.match(label)
+        if m:
+            return int(m.group(1))
+    return 2
+
+
 def has_new_reply(threads: list[dict], comments: list[dict], maintainer: str) -> bool:
     """True when the maintainer has spoken last somewhere on the PR.
 
     `threads`: unresolved review threads, each {"comments": [{"author": login, "createdAt": iso}, …]}.
     `comments`: PR conversation comments, each {"author": login, "createdAt": iso}.
-    A thread counts when its last comment is the maintainer's; conversation comments count when the
-    maintainer's newest one is newer than everyone else's newest one.
     """
     for thread in threads:
         if thread.get("comments") and thread["comments"][-1].get("author") == maintainer:
@@ -76,49 +104,94 @@ def has_new_reply(threads: list[dict], comments: list[dict], maintainer: str) ->
     return bool(mine) and (not others or max(mine) > max(others))
 
 
-def build_queue(issues: list[dict], replies: dict[int, ReplyInfo] | None = None) -> list[Item]:
-    """Classify open issues. `replies` maps issue number → (PR number, maintainer replied?)."""
+def classify(
+    issue: dict,
+    closed: set[int],
+    native_deps: dict[int, IntList],
+    replies: dict[int, ReplyInfo],
+    extra_deps: list[int] | None = None,
+) -> Issue:
+    number = issue["number"]
+    labels = [label["name"] for label in issue.get("labels", [])]
+    deps = dependencies(issue.get("body", "")) + native_deps.get(number, []) + (extra_deps or [])
+    waiting_on = sorted({d for d in deps if d != number and d not in closed})
+    pr, replied = replies.get(number, (None, False))
+    if BLOCKED in labels:
+        state = "blocked"
+    elif NEEDS_MAINTAINER in labels:
+        state = "replied" if replied else "asked"
+    elif any(label in labels for label in IN_PROGRESS):
+        state = "active"
+    elif waiting_on:
+        state = "waiting"
+    else:
+        state = "ready"
+    return Issue(
+        number, issue["title"], state, priority(labels), waiting_on, IMPROVEMENT in labels, pr
+    )
+
+
+def plan(
+    issues: list[dict],
+    sub_issues: dict[int, IntList],
+    native_deps: dict[int, IntList] | None = None,
+    replies: dict[int, ReplyInfo] | None = None,
+) -> tuple[LaneList, IssueList]:
+    """Lanes (ranked) and issues outside lanes (ranked). `sub_issues` maps lane → ordered children."""
+    native_deps = native_deps or {}
     replies = replies or {}
+    by_number = {i["number"]: i for i in issues}
     closed = {i["number"] for i in issues if i["state"].upper() == "CLOSED"}
-    items = []
-    for issue in issues:
-        if issue["state"].upper() != "OPEN":
+    is_open = {i["number"] for i in issues if i["state"].upper() == "OPEN"}
+    lane_numbers = [
+        n for n in is_open if any(label["name"] == LANE for label in by_number[n].get("labels", []))
+    ]
+    in_a_lane = {c for n in lane_numbers for c in sub_issues.get(n, [])}
+
+    lanes = []
+    for n in lane_numbers:
+        lane_issue = by_number[n]
+        lane_labels = [label["name"] for label in lane_issue.get("labels", [])]
+        lane_deps = dependencies(lane_issue.get("body", "")) + native_deps.get(n, [])
+        lane_waiting = sorted({d for d in lane_deps if d != n and d not in closed})
+        children = [c for c in sub_issues.get(n, []) if c in is_open]
+        if not children:
+            lanes.append(Lane(n, lane_issue["title"], priority(lane_labels), "done"))
             continue
-        number = issue["number"]
-        labels = [label["name"] for label in issue.get("labels", [])]
-        deps = [d for d in dependencies(issue.get("body", "")) if d != number]
-        waiting_on = [d for d in deps if d not in closed]
-        pr, replied = replies.get(number, (None, None))
-        if BLOCKED in labels:
-            state = "blocked"
-        elif NEEDS_MAINTAINER in labels:
-            state = "needs-maintainer"
-        elif any(label in labels for label in IN_PROGRESS):
-            state = "in-progress"
-        elif waiting_on:
-            state = "waiting"
-        else:
-            state = "ready"
-        items.append(
-            Item(
-                number,
-                issue["title"],
-                state,
-                deps,
-                waiting_on,
-                labels,
-                IMPROVEMENT in labels,
-                pr,
-                replied if state == "needs-maintainer" else None,
+        head = children[0]
+        current = classify(by_number[head], closed, native_deps, replies, lane_waiting)
+        lanes.append(
+            Lane(
+                n,
+                lane_issue["title"],
+                priority(lane_labels),
+                current.state,
+                current,
+                children[1:],
+                lane_waiting,
             )
         )
+    state_rank = {"active": 0, "replied": 1, "ready": 2, "asked": 3, "blocked": 4, "waiting": 5}
+    lanes.sort(key=lambda lane: (lane.state == "done", lane.priority, lane.number))
 
-    def rank(item: Item) -> int:
-        if item.state == "needs-maintainer":
-            return 1 if item.replied else 3
-        return {"in-progress": 0, "ready": 2, "blocked": 4, "waiting": 5}[item.state]
+    loose = [
+        classify(by_number[n], closed, native_deps, replies)
+        for n in sorted(is_open)
+        if n not in in_a_lane and n not in lane_numbers
+    ]
+    loose.sort(key=lambda i: (state_rank[i.state], i.improvement, i.priority, i.number))
+    return lanes, loose
 
-    return sorted(items, key=lambda item: (rank(item), item.improvement, item.number))
+
+def start_now(lanes: list[Lane], slots: int) -> tuple[LaneList, LaneList]:
+    """(lanes to work on now, ready lanes left waiting for a slot). Active lanes use slots first,
+    then lanes the maintainer has replied on, then ready lanes; asked lanes are paused."""
+    active = [lane for lane in lanes if lane.state == "active"]
+    candidates = [lane for lane in lanes if lane.state == "replied"] + [
+        lane for lane in lanes if lane.state == "ready"
+    ]
+    free = max(0, slots - len(active))
+    return active + candidates[:free], candidates[free:]
 
 
 def _gh(*args: str) -> str:
@@ -126,17 +199,29 @@ def _gh(*args: str) -> str:
 
 
 def fetch_issues() -> list[dict]:
-    out = _gh(
-        "issue",
-        "list",
-        "--state",
-        "all",
-        "--limit",
-        "500",
-        "--json",
-        "number,title,state,labels,body",
-    )
-    return json.loads(out)
+    fields = "number,title,state,labels,body"
+    return json.loads(_gh("issue", "list", "--state", "all", "--limit", "500", "--json", fields))
+
+
+def fetch_sub_issues(repo: str, lanes: list[int]) -> dict[int, IntList]:
+    """Ordered sub-issue numbers per lane (native GitHub sub-issues)."""
+    out = {}
+    for n in lanes:
+        items = json.loads(_gh("api", f"repos/{repo}/issues/{n}/sub_issues?per_page=100"))
+        out[n] = [i["number"] for i in items]
+    return out
+
+
+def fetch_native_deps(repo: str, numbers: list[int]) -> dict[int, IntList]:
+    """Native "blocked by" dependencies per issue (empty when the API isn't available)."""
+    out = {}
+    for n in numbers:
+        try:
+            items = json.loads(_gh("api", f"repos/{repo}/issues/{n}/dependencies/blocked_by"))
+        except subprocess.CalledProcessError:
+            return {}
+        out[n] = [i["number"] for i in items]
+    return out
 
 
 _THREADS_QUERY = """
@@ -147,12 +232,11 @@ query($o:String!,$r:String!,$n:Int!){ repository(owner:$o,name:$r){ pullRequest(
 """
 
 
-def fetch_replies(issue_numbers: list[int], maintainer: str) -> dict[int, ReplyInfo]:
+def fetch_replies(repo: str, issue_numbers: list[int], maintainer: str) -> dict[int, ReplyInfo]:
     """For issues waiting on the maintainer: their open PR and whether the maintainer has replied."""
     if not issue_numbers:
         return {}
-    repo = json.loads(_gh("repo", "view", "--json", "owner,name"))
-    owner, name = repo["owner"]["login"], repo["name"]
+    owner, name = repo.split("/", 1)
     prs = json.loads(_gh("pr", "list", "--state", "open", "--json", "number,body,headRefName"))
     result: dict[int, ReplyInfo] = {}
     for issue in issue_numbers:
@@ -198,140 +282,164 @@ def fetch_replies(issue_numbers: list[int], maintainer: str) -> dict[int, ReplyI
     return result
 
 
-def render(items: list[Item]) -> str:
-    if not items:
-        return "No open issues."
-    lines = [f"{'#':>5}  {'state':<18}  {'waits on':<12}  title"]
-    for item in items:
-        waits = ", ".join(f"#{d}" for d in item.open_dependencies) or "-"
-        state = item.state
-        if state == "needs-maintainer":
-            state = "needs-you:replied" if item.replied else "needs-you"
-        mark = " (improvement)" if item.improvement else ""
-        pr = f" [PR #{item.pr}]" if item.pr else ""
-        lines.append(f"{item.number:>5}  {state:<18}  {waits:<12}  {item.title}{mark}{pr}")
-    replied = [f"#{i.number}" for i in items if i.state == "needs-maintainer" and i.replied]
-    asked = [f"#{i.number}" for i in items if i.state == "needs-maintainer" and not i.replied]
-    main = [f"#{i.number}" for i in items if i.state == "ready" and not i.improvement]
-    extra = [f"#{i.number}" for i in items if i.state == "ready" and i.improvement]
-    lines.append("")
-    lines.append(f"Resume first (maintainer replied): {', '.join(replied) if replied else 'none'}")
-    lines.append(f"Ready, main path first: {', '.join(main) if main else 'none'}")
-    lines.append(f"Ready improvements: {', '.join(extra) if extra else 'none'}")
-    lines.append(f"Waiting on the maintainer: {', '.join(asked) if asked else 'none'}")
-    return "\n".join(lines)
+def render(lanes: list[Lane], loose: list[Issue], slots: int) -> str:
+    lines = []
+    if lanes:
+        lines.append(f"{'lane':>6}  {'pri':<3}  {'state':<8}  {'current':<9}  {'then':<16}  title")
+        for lane in lanes:
+            cur = f"#{lane.current.number}" if lane.current else "-"
+            then = " ".join(f"#{n}" for n in lane.remaining[:4]) or "-"
+            extra = ""
+            if lane.state == "waiting":
+                waits = lane.current.open_dependencies if lane.current else lane.lane_dependencies
+                extra = "  (waits on " + ", ".join(f"#{d}" for d in waits) + ")"
+            lines.append(
+                f"{'#' + str(lane.number):>6}  P{lane.priority:<2}  {lane.state:<8}  {cur:<9}  "
+                f"{then:<16}  {lane.title}{extra}"
+            )
+        now, queued = start_now(lanes, slots)
+        lines.append("")
+        lines.append(f"Lanes in parallel: {slots}")
+        work = [
+            f"lane #{lane.number} → #{lane.current.number} ({lane.state})"
+            for lane in now
+            if lane.current
+        ]
+        lines.append(f"Work now: {'; '.join(work) if work else 'nothing'}")
+        if queued:
+            more = ", ".join(f"#{lane.number}" for lane in queued)
+            lines.append(
+                f"More lanes ready ({more}): ask the maintainer whether to run them in parallel"
+            )
+        asked = [f"#{lane.number}" for lane in lanes if lane.state == "asked"]
+        lines.append(f"Paused, waiting on the maintainer: {', '.join(asked) if asked else 'none'}")
+    if loose:
+        if lines:
+            lines.append("")
+        lines.append("Not in a lane:")
+        for issue in loose:
+            mark = " (improvement)" if issue.improvement else ""
+            lines.append(
+                f"{'#' + str(issue.number):>6}  P{issue.priority:<2}  {issue.state:<8}  "
+                f"{issue.title}{mark}"
+            )
+    return "\n".join(lines) if lines else "No open issues."
 
 
 def _self_test() -> None:
-    issues = [
-        {"number": 1, "title": "model", "state": "CLOSED", "labels": [], "body": ""},
-        {
-            "number": 2,
-            "title": "reader",
-            "state": "OPEN",
-            "labels": [],
-            "body": "### Context\n\n- Depends on #1 (canonical model).\n- See docs/#7 and PR #99.",
-        },
-        {
-            "number": 3,
-            "title": "writer",
-            "state": "OPEN",
-            "labels": [],
-            "body": "- Depends on #1 (model), #2 (reader) and #3 (itself).",
-        },
-        {
-            "number": 4,
-            "title": "redaction",
-            "state": "OPEN",
-            "labels": [{"name": "factory:blocked"}],
-            "body": "Depends on #1",
-        },
-        {
-            "number": 5,
-            "title": "upload",
-            "state": "OPEN",
-            "labels": [{"name": "factory:review"}],
-            "body": "",
-        },
-        {
-            "number": 6,
-            "title": "edge case",
-            "state": "OPEN",
-            "labels": [{"name": "improvement"}],
-            "body": "- Depends on #1 (model).",
-        },
-        {"number": 7, "title": "writer", "state": "OPEN", "labels": [], "body": "Depends on #1"},
-        {
-            "number": 8,
-            "title": "asked, answered",
-            "state": "OPEN",
-            "labels": [{"name": NEEDS_MAINTAINER}],
-            "body": "",
-        },
-        {
-            "number": 9,
-            "title": "asked, not answered",
-            "state": "OPEN",
-            "labels": [{"name": NEEDS_MAINTAINER}],
-            "body": "",
-        },
-    ]
-    assert dependencies(issues[1]["body"]) == [1]
-    assert dependencies(issues[2]["body"]) == [1, 2, 3]
+    def iss(n, title="t", state="OPEN", labels=(), body=""):
+        return {
+            "number": n,
+            "title": title,
+            "state": state,
+            "labels": [{"name": label} for label in labels],
+            "body": body,
+        }
 
+    issues = [
+        iss(1, state="CLOSED"),
+        # lane A (P0): 4 then 6; 4 is ready
+        iss(10, "Lane A", labels=("lane", "P0")),
+        iss(4, "sts writer", labels=("P0",), body="- Depends on #1 (model)."),
+        iss(6, "upload", labels=("P1",)),
+        # lane B (P1): 5 then 8; 5 asked the maintainer
+        iss(11, "Lane B", labels=("lane", "P1")),
+        iss(5, "export", labels=(NEEDS_MAINTAINER,)),
+        iss(8, "qa builder"),
+        # lane C (P2, no label): 7 is blocked natively by #4
+        iss(12, "Lane C", labels=("lane",)),
+        iss(7, "openrouter"),
+        # lane D (P3): waits as a whole on lane A
+        iss(13, "Lane D", labels=("lane", "P3"), body="Depends on #10"),
+        iss(17, "hardening", labels=("improvement",)),
+        # a finished lane
+        iss(14, "Lane E", labels=("lane", "P1")),
+        iss(20, "done", state="CLOSED"),
+        # an issue outside any lane
+        iss(30, "loose", labels=("P1",)),
+    ]
+    subs = {10: [4, 6], 11: [5, 8], 12: [7], 13: [17], 14: [20]}
+    lanes, loose = plan(issues, subs, native_deps={7: [4]}, replies={})
+    by = {lane.number: lane for lane in lanes}
+    assert by[10].state == "ready" and by[10].current.number == 4 and by[10].remaining == [6]
+    assert by[11].state == "asked" and by[11].current.number == 5
+    assert by[12].state == "waiting" and by[12].current.open_dependencies == [4], by[12]
+    assert by[13].state == "waiting" and by[13].lane_dependencies == [10], by[13]
+    assert by[14].state == "done"
+    # ranked by priority, done last
+    assert [lane.number for lane in lanes] == [10, 11, 12, 13, 14], [lane.number for lane in lanes]
+    assert [i.number for i in loose] == [30]
+    now, queued = start_now(lanes, slots=1)
+    assert [lane.number for lane in now] == [10] and queued == []
+    # with lane B answered, the single slot resumes B first and leaves A queued
+    lanes2, _ = plan(issues, subs, native_deps={7: [4]}, replies={5: (40, True)})
+    now2, queued2 = start_now(lanes2, slots=1)
+    assert [lane.number for lane in now2] == [11] and [lane.number for lane in queued2] == [10]
+    # two slots: both
+    now2b, queued2b = start_now(lanes2, slots=2)
+    assert [lane.number for lane in now2b] == [11, 10] and queued2b == []
+    # an active lane uses the only slot
+    issues_active = [
+        dict(i, labels=i["labels"] + [{"name": "factory:building"}]) if i["number"] == 4 else i
+        for i in issues
+    ]
+    lanes3, _ = plan(issues_active, subs, native_deps={7: [4]})
+    now3, queued3 = start_now(lanes3, slots=1)
+    assert [lane.number for lane in now3] == [10] and queued3 == []
     # reply detection
     bot, me = "claude[bot]", "maint"
-    t_answered = {"comments": [{"author": bot, "createdAt": "1"}, {"author": me, "createdAt": "2"}]}
-    t_open = {"comments": [{"author": bot, "createdAt": "1"}]}
-    assert has_new_reply([t_open, t_answered], [], me)
-    assert not has_new_reply([t_open], [], me)
-    assert has_new_reply(
-        [], [{"author": bot, "createdAt": "1"}, {"author": me, "createdAt": "2"}], me
-    )
-    assert not has_new_reply(
-        [], [{"author": me, "createdAt": "1"}, {"author": bot, "createdAt": "2"}], me
-    )
-
-    queue = build_queue(issues, {8: (31, True), 9: (32, False)})
-    by = {item.number: item for item in queue}
-    assert by[2].state == "ready", by[2]
-    assert by[3].state == "waiting" and by[3].open_dependencies == [2], by[3]
-    assert by[4].state == "blocked", by[4]
-    assert by[5].state == "in-progress", by[5]
-    assert by[6].state == "ready" and by[6].improvement, by[6]
-    assert by[8].state == "needs-maintainer" and by[8].replied and by[8].pr == 31, by[8]
-    assert by[9].state == "needs-maintainer" and by[9].replied is False, by[9]
-    # in-progress, replied, ready main path (2, 7), ready improvement (6), waiting on maintainer,
-    # blocked, waiting on dependencies
-    assert [i.number for i in queue] == [5, 8, 2, 7, 6, 9, 4, 3], [i.number for i in queue]
-    assert "Resume first (maintainer replied): #8" in render(queue)
+    done_thread = {
+        "comments": [{"author": bot, "createdAt": "1"}, {"author": me, "createdAt": "2"}]
+    }
+    assert has_new_reply([done_thread], [], me)
+    assert not has_new_reply([{"comments": [{"author": bot, "createdAt": "1"}]}], [], me)
+    assert "Work now: lane #10 → #4 (ready)" in render(lanes, loose, 1)
     print("queue.py self-test: ok")
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--lanes", type=int, default=1, help="lanes in parallel (default 1)")
     parser.add_argument("--json", action="store_true", help="print JSON instead of a table")
-    parser.add_argument("--offline", action="store_true", help="don't check PRs for replies")
+    parser.add_argument("--offline", action="store_true", help="skip reply/dependency API calls")
     parser.add_argument("--maintainer", help="GitHub login (default: the logged-in gh user)")
     parser.add_argument("--self-test", action="store_true", help="run offline checks and exit")
     args = parser.parse_args(argv)
     if args.self_test:
         _self_test()
         return 0
+    repo = _gh("repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner").strip()
     issues = fetch_issues()
-    replies: dict[int, ReplyInfo] = {}
+    open_issues = [i for i in issues if i["state"].upper() == "OPEN"]
+    lane_ids = [i["number"] for i in open_issues if any(lb["name"] == LANE for lb in i["labels"])]
+    subs = fetch_sub_issues(repo, lane_ids) if lane_ids else {}
+    native, replies = {}, {}
     if not args.offline:
-        waiting = [
+        native = fetch_native_deps(repo, [i["number"] for i in open_issues])
+        asked = [
             i["number"]
-            for i in issues
-            if i["state"].upper() == "OPEN"
-            and any(label["name"] == NEEDS_MAINTAINER for label in i.get("labels", []))
+            for i in open_issues
+            if any(lb["name"] == NEEDS_MAINTAINER for lb in i.get("labels", []))
         ]
-        if waiting:
+        if asked:
             maintainer = args.maintainer or _gh("api", "user", "-q", ".login").strip()
-            replies = fetch_replies(waiting, maintainer)
-    items = build_queue(issues, replies)
-    print(json.dumps([asdict(i) for i in items], indent=2) if args.json else render(items))
+            replies = fetch_replies(repo, asked, maintainer)
+    lanes, loose = plan(issues, subs, native, replies)
+    if args.json:
+        now, queued = start_now(lanes, args.lanes)
+        print(
+            json.dumps(
+                {
+                    "lanes": [asdict(lane) for lane in lanes],
+                    "not_in_a_lane": [asdict(i) for i in loose],
+                    "work_now": [lane.number for lane in now],
+                    "ready_waiting_for_slot": [lane.number for lane in queued],
+                },
+                indent=2,
+            )
+        )
+    else:
+        print(render(lanes, loose, args.lanes))
     return 0
 
 
