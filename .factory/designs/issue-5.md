@@ -36,3 +36,11 @@ None.
 
 ## Size estimate
 M
+
+## Implementation notes
+- Built: `pensieve_traces/writers/convomem.py` (`sessions_to_conversations`, `sessions_to_conversations_with_ids`, `write_conversations`) and `convert --to convomem-conversations --out DIR` (PR #40).
+- Contract for #8: `DIR/conversations.json` is the filler wrapper `{"evidence_items": [{"conversations": [{id, containsEvidence: false, messages[{speaker, text}]}]}]}`; `DIR/conversations.message_ids.json` maps conversation id → canonical message ids, 1:1 and in order with `messages`. Conversation id = session id.
+- Kept: User/Assistant turns only; dropped meta, sidechain, system, tool results and empty/whitespace-only turns; same-speaker turns not merged. `summarize` appends `[ran NAME: ARG]` (Bash-style `command` only, from redacted arguments, ARG ≤ 80 chars).
+- Safety: redaction on by default via `prepare_for_output`, one anonymizer shared across all sessions in a write (consistent placeholders); `_check_out_dir` guard; refuses and writes nothing if either output exists; `--include-sidechains` rejected.
+- Design review (REVISE, 2 changes) decided the four open questions without escalation: wrapper, `--out` directory, refuse existing outputs, drop tool results.
+- Follow-ups: #41 (duplicate session ids, all-or-nothing pair, cross-session placeholder test, optional `--force`).
