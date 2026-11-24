@@ -17,6 +17,9 @@ uv sync --locked --extra dev    # same lockfile CI uses
 1. uvx ruff@0.17.4 format --check .         # ruff pinned to match CI
 2. uvx ruff@0.17.4 check .
 3. uv run --no-sync pytest -q               # offline: no network, no model, no real traces
+4. If pyproject.toml defines the `redact` extra: uv sync --locked --extra dev --extra redact,
+   then uv run --no-sync pytest -q again, so tests that need teich run instead of skipping
+   (CI job "Tests (redact)"). Re-sync with --extra dev afterwards if you continue working.
 
 If ci.yml changes, update this list to match. Never "fix" a failure by
 changing lint rules, the ruff pin, or skipping tests.
