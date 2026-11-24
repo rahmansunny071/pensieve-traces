@@ -42,10 +42,7 @@ an implementation PR with "Checks run" and "Deviations", review comments and lab
 5. **Run log.** Open or create `.factory/runs/<YYYY-MM-DD>.jsonl` (gitignored) and run
    `python .claude/skills/factory/scripts/runlog.py status` to see whether an earlier session left an
    issue mid-flight. If so, resume it at its recorded step instead of restarting. Log every step (below).
-6. **The Actions review.** If `.github/workflows/factory-review.yml` is enabled, ask once whether to
-   disable it for this run (`gh workflow disable factory-review.yml`). It's a weaker duplicate review on
-   every push, and it spends usage. Re-enable it at the end if you disabled it.
-7. **Long runs.** Your own context grows with every step. After 2–3 issues, or when the session feels
+6. **Long runs.** Your own context grows with every step. After 2–3 issues, or when the session feels
    long, finish the current issue, write the run summary and suggest a fresh session. The run log lets
    it pick up cleanly.
 
@@ -83,11 +80,13 @@ Decide the tier when you pick the issue (it may be in the issue already):
 
 ### For each issue N
 
-Create a worktree: `git worktree add ../<repo>-issue-N -b factory/issue-N origin/main`. Pass subagents
+Create a worktree on a **`local/issue-N`** branch: `git worktree add ../<repo>-issue-N -b local/issue-N
+origin/main`. The `local/` prefix keeps the GitHub Actions factory (which reviews `factory/issue-*`
+branches) from also reviewing skill PRs. Pass subagents
 **absolute paths**. Set the label `factory:designing`. Log each step with `runlog.py add`.
 
 **1. Plan (Sonnet builder, phase 1).** Spawn the builder with the "Builder" brief, phase 1: it writes the
-plan to `.factory/designs/issue-N.md`, commits it on `factory/issue-N`, pushes, and **stops**, returning
+plan to `.factory/designs/issue-N.md`, commits it on `local/issue-N`, pushes, and **stops**, returning
 the plan. Keep the agent's id: the same agent builds and fixes.
 
 **2. Plan check.**
@@ -156,8 +155,9 @@ label and continue.
 
 ## Coexisting with the GitHub Actions factory
 
-Never add `factory:design` or `design:approved`, and never write `@claude` in a comment: those start the
-Actions workflows. Status labels (`factory:designing`, `factory:building`, `factory:review`,
+The two modes never trigger each other: skill branches are `local/issue-N` (the Actions review only
+matches `factory/issue-*`), and the skill never adds `factory:design` or `design:approved` or writes
+`@claude` in a comment, which are what start the Actions workflows. Status labels (`factory:designing`, `factory:building`, `factory:review`,
 `factory:blocked`) start nothing.
 
 ## When you're done
