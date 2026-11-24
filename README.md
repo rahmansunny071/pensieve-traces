@@ -73,6 +73,7 @@ pensieve-traces convert path/to/<project-dir> --to sts --out traces/
 ```
 
 - Redaction is on by default. Without the `redact` extra the command exits with an error and writes nothing; pass `--no-redact` to write unredacted output (a warning is printed).
+- `--out` must not be the input directory (or inside it), nor the directory of an input file: Claude Code names sessions `<session id>.jsonl`, so writing there would overwrite the originals. The command refuses and writes nothing.
 - Sidechain (subagent) messages are skipped; add `--include-sidechains` to keep them.
 - Fields STS has no place for are dropped: parent ids, usage, request ids, `is_meta`/`is_error` flags, metadata, `cwd`, `project`, branch and session start/end times. Meta messages are still written.
 - From Python: `pensieve_traces.writers.sts.write_session(session, path)` and `session_to_sts_lines(session)` (the latter does not redact).
