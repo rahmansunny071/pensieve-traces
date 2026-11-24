@@ -36,3 +36,10 @@ Offline, runs under `--extra dev` alone. A fake `huggingface_hub` module in `sys
 M
 
 Range verified against huggingface_hub 1.33.0 and 2.4.0 (every API used is identical); `<3` keeps teich's transitive 2.4.0 in `uv.lock`.
+
+## Implementation notes
+- Built in PR #37: `pensieve_traces/upload.py` (`collect_files`, `check_redaction`, `require_hub`, `upload_files`) and an `upload DIR --repo ID [--public] [--allow-unredacted] [--yes]` subcommand in `cli.py`. New extra `hub = ["huggingface_hub>=1.0,<3"]`. The range was verified against 1.33.0 and 2.4.0, and `<3` keeps the huggingface-hub 2.4.0 that teich already pulls in.
+- Redaction marker: `write_session` writes `pensieveRedacted` (bool) on the STS session header. This reverses #4's "no extra header keys" decision; the STS spec allows extra header metadata. `session_to_sts_lines(redacted=None)` omits the key, so the goldens are unchanged. The uploader fails closed: anything but a first-line JSON object with `pensieveRedacted: true` counts as unredacted.
+- Design review (privacy): `upload_folder(allow_patterns="*.jsonl")` would have uploaded unchecked subdirectory files, because huggingface_hub's fnmatch `*` crosses `/`. The upload now uses `create_commit` + `CommitOperationAdd` for exactly the checked top-level files, and a test proves subdirectory files are excluded.
+- Visibility: private by default. An existing repo with `private is not True` is refused unless `--public` is given. `--public` warns, and an existing private repo stays private.
+- Code review fixes: the version bound (see above); a non-TTY stdin without `--yes` now aborts; the hub import is checked before the summary and prompt. No follow-up issues.
