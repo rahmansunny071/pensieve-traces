@@ -28,10 +28,12 @@ pi (later)  ─┘            timestamp, role, text,      ├─ ConvoMem conver
 `pensieve_traces.model` defines the harness-neutral dataclasses `Session`, `Message`, `ToolCall`, `Usage` and the `Role` enum (no extra dependencies). Timestamps are timezone-aware, tool arguments stay a raw JSON string, and `Session.to_json()` / `Session.from_json()` round-trip losslessly. The model holds raw text and does no redaction.
 
 ```python
+from pathlib import Path
+
 from pensieve_traces import Session
 
-session = Session.from_json(path.read_text())
-session.tool_result_for(call_id)
+session = Session.from_json(Path("session.json").read_text())
+session.tool_result_for("call-1")
 ```
 
 ## How this repo is built: an agent factory

@@ -155,6 +155,9 @@ class Session:
     messages: list[Message] = field(default_factory=list)
     # Lazily built id -> message index; not part of equality, repr or serialisation.
     _index: dict[str, Message] = field(default_factory=dict, init=False, repr=False, compare=False)
+    _index_key: tuple[tuple[int, str], ...] | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         _check_aware(self.started_at, "started_at")
@@ -168,8 +171,15 @@ class Session:
     # -- lookups ---------------------------------------------------------
 
     def _by_id(self) -> dict[str, Message]:
-        if len(self._index) != len(self.messages):
-            self._index = {m.id: m for m in self.messages}
+        # Rebuild whenever the message objects or their ids change (not just the count).
+        key = tuple((id(m), m.id) for m in self.messages)
+        if key != self._index_key:
+            index: dict[str, Message] = {}
+            for m in self.messages:
+                if m.id in index:
+                    raise ValueError(f"duplicate message id: {m.id!r}")
+                index[m.id] = m
+            self._index, self._index_key = index, key
         return self._index
 
     def message(self, id: str) -> Message | None:

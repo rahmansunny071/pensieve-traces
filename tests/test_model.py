@@ -109,3 +109,20 @@ def test_non_serialisable_metadata_fails_at_to_json():
     s = Session(id="s", metadata={"bad": object()})
     with pytest.raises(TypeError):
         s.to_json()
+
+
+def test_index_rebuilds_when_message_replaced_at_same_length():
+    s = build_session()
+    assert s.message("m3") is s.messages[2]
+    new = Message(id="n3", role=Role.USER)
+    s.messages[2] = new
+    assert s.message("m3") is None
+    assert s.message("n3") is new
+
+
+def test_index_rebuild_rejects_duplicate_ids():
+    s = build_session()
+    s.message("m1")
+    s.messages.append(Message(id="m1", role=Role.USER))
+    with pytest.raises(ValueError):
+        s.message("m1")
