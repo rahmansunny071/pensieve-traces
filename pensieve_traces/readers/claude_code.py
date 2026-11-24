@@ -16,10 +16,15 @@ Id and parent contract
 
 Usage contract
     Assistant records sharing a ``requestId`` stay separate messages. For each ``requestId``,
-    the usage of the last assistant record in file-read order (including records that produce
-    no message) is put on the last kept assistant message of that group in the final merged
-    order, also when the group spans several files of one session; every other message in the
-    group has no usage. If the group produced no messages, its usage is dropped (debug log).
+    the usage of the last surviving assistant record is put on the last kept assistant message
+    of that group in the final merged order; every other message in the group has no usage.
+    Surviving records are those left after de-duplication by record ``uuid`` (a ``uuid`` seen
+    in an earlier file of the session is skipped, for usage exactly as for messages); records
+    that produce no message still count. "Last" uses the same stable order as the messages:
+    timestamp (untimestamped last), then file order, then position in the file. This also
+    holds when the group spans several files of one session. If the group produced no
+    messages, its usage is dropped (debug log). A message without ``requestId`` keeps its own
+    record's usage.
     Summing usage across messages gives the per-request total. Key mapping:
     ``input_tokens`` -> ``input_tokens``, ``output_tokens`` -> ``output_tokens``,
     ``cache_read_input_tokens`` -> ``cache_read_tokens``,
@@ -69,6 +74,14 @@ class ClaudeCodeParseError(ValueError):
 
 
 @dataclass
+class _UsageRecord:
+    uuid: str
+    timestamp: datetime | None
+    request_id: str
+    usage: Usage | None
+
+
+@dataclass
 class _ParsedFile:
     path: Path
     session_id: str
@@ -77,7 +90,9 @@ class _ParsedFile:
     title: str | None = None
     messages: list[Message] = field(default_factory=list)
     record_uuids: list[str] = field(default_factory=list)  # parallel to messages
-    request_usage: dict[str, Usage | None] = field(default_factory=dict)
+    kept_uuids: set[str] = field(default_factory=set)  # every kept record uuid
+    # Assistant records with a requestId, in file order: (uuid, timestamp, request_id, usage).
+    usage_records: list[_UsageRecord] = field(default_factory=list)
 
 
 def _join(parts: list[str]) -> str:
@@ -94,7 +109,7 @@ class _FileParser:
         self._seen_ids: set[str] = set()
         self._pending: list[tuple[Message, Usage | None]] = []
         self._record_uuids: list[str] = []
-        self._request_usage: dict[str, Usage | None] = {}
+        self._usage_records: list[_UsageRecord] = []
 
     def fail(self, reason: str) -> ClaudeCodeParseError:
         return ClaudeCodeParseError(self.path, self.line, reason)
@@ -111,7 +126,8 @@ class _FileParser:
         for msg, usage in self._pending:
             if msg.request_id is None:
                 msg.usage = usage  # no requestId: keeps its own record's usage
-        self.parsed.request_usage = self._request_usage
+        self.parsed.usage_records = self._usage_records
+        self.parsed.kept_uuids = self._seen_uuids
         if self._session_id is not None:
             self.parsed.session_id = self._session_id
         self.parsed.messages = [m for m, _ in self._pending]
@@ -180,8 +196,8 @@ class _FileParser:
                 model = message["model"] if isinstance(message.get("model"), str) else None
         request_id = rec.get("requestId")
         if rtype == "assistant" and isinstance(request_id, str):
-            # Last assistant record of the group wins, even if it yields no message.
-            self._request_usage[request_id] = usage
+            # Usage belongs to the record, even if it yields no message; resolved on merge.
+            self._usage_records.append(_UsageRecord(uuid, timestamp, request_id, usage))
             usage = None
         if not parts:
             return
@@ -335,11 +351,12 @@ def _tool_result_text(content: Any) -> str:
     return _join(parts)
 
 
-def _attach_usage(messages: list[Message], files: list[_ParsedFile]) -> None:
-    """Put each requestId group's usage on its last message in merged order (see docstring)."""
-    usage_by_request: dict[str, Usage | None] = {}
-    for parsed in files:  # file-read order: the last record of a group wins
-        usage_by_request.update(parsed.request_usage)
+def _attach_usage(messages: list[Message], records: list[_UsageRecord]) -> None:
+    """Put each requestId group's usage on its last message in merged order (see docstring).
+
+    ``records`` are the surviving usage records in merged order.
+    """
+    usage_by_request = {r.request_id: r.usage for r in records}  # the last record wins
     last: dict[str, Message] = {}
     for msg in messages:
         if msg.role is Role.ASSISTANT and msg.request_id is not None:
@@ -356,22 +373,23 @@ def _build_session(session_id: str, files: list[_ParsedFile]) -> Session:
     """Merge the parsed files of one session (``files`` is in sorted filename order)."""
     main = next((f for f in files if f.path.stem == session_id), files[0])
     messages: list[Message] = []
+    records: list[_UsageRecord] = []
     seen: set[str] = set()
     for parsed in files:
-        file_uuids: set[str] = set()
+        records.extend(r for r in parsed.usage_records if r.uuid not in seen)
         for msg, uuid in zip(parsed.messages, parsed.record_uuids, strict=True):
             if uuid in seen:
                 logger.debug(
                     "%s: skipping message %r of repeated uuid %r", parsed.path, msg.id, uuid
                 )
                 continue
-            file_uuids.add(uuid)
             messages.append(msg)
-        seen |= file_uuids
+        seen |= parsed.kept_uuids
     if len(files) > 1:
         # Stable: file order breaks ties; untimestamped messages go last.
         messages.sort(key=lambda m: (m.timestamp is None, m.timestamp))
-    _attach_usage(messages, files)
+        records.sort(key=lambda r: (r.timestamp is None, r.timestamp))
+    _attach_usage(messages, records)
     stamps = [m.timestamp for m in messages if m.timestamp is not None]
     cwd = main.cwd
     return Session(

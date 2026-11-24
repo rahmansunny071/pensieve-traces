@@ -527,3 +527,56 @@ def test_matches_teich_when_available(name):
     assert [(r, " ".join(x.split())) for r, x in ours] == [
         (r, " ".join(x.split())) for r, x in theirs
     ]
+
+
+def _usage_rec(uuid, out, sec, content=None, sid="S"):
+    r = asst_rec(
+        uuid,
+        usage={"output_tokens": out},
+        requestId="r",
+        sessionId=sid,
+        timestamp=f"2026-03-01T10:00:0{sec}Z",
+    )
+    if content is not None:
+        r["message"]["content"] = content
+    return json.dumps(r)
+
+
+@pytest.mark.parametrize("sid", ["0aaa", "faaa"])
+def test_usage_follows_last_record_when_later_file_has_partial_copy(tmp_path, sid):
+    write_lines(
+        tmp_path,
+        _usage_rec("a1", 1, 1, sid=sid),
+        _usage_rec("a2", 2, 2, sid=sid),
+        _usage_rec("a3", 3, 3, sid=sid),
+        name=f"{sid}.jsonl",
+    )
+    write_lines(
+        tmp_path,
+        _usage_rec("a1", 1, 1, sid=sid),
+        _usage_rec("a2", 2, 2, sid=sid),
+        name="agent-x.jsonl",
+    )
+    (s,) = read_project(tmp_path)
+    assert [m.id for m in s.messages] == ["a1", "a2", "a3"]
+    assert [m.usage.output_tokens if m.usage else None for m in s.messages] == [None, None, 3]
+    assert sum(m.usage.output_tokens for m in s.messages if m.usage) == 3
+
+
+def test_message_less_last_record_usage_beats_earlier_copy_in_later_file(tmp_path):
+    hidden = [{"type": "redacted_thinking", "data": "xx"}]
+    write_lines(
+        tmp_path,
+        _usage_rec("a1", 1, 1, sid="0aaa"),
+        _usage_rec("a2", 9, 2, hidden, sid="0aaa"),
+        name="0aaa.jsonl",
+    )
+    write_lines(
+        tmp_path,
+        _usage_rec("a1", 1, 1, sid="0aaa"),
+        _usage_rec("a2", 2, 2, sid="0aaa"),
+        name="agent-x.jsonl",
+    )
+    (s,) = read_project(tmp_path)
+    assert [m.id for m in s.messages] == ["a1"]
+    assert s.messages[0].usage == Usage(output_tokens=9)
