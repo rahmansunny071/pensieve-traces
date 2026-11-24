@@ -6,6 +6,9 @@ You are the REVIEW agent for PR #$ARGUMENTS. Don't push commits.
 
 1. `gh pr view $ARGUMENTS` and `gh pr diff $ARGUMENTS`. Find the design file
    referenced in the PR body and read it.
+   Verify the PR body's "Checks run" against CI with `gh pr checks $ARGUMENTS`
+   (CI runs the same checks as CLAUDE.md). Don't try to run tests or linters
+   yourself; this job is read-only. If CI is still pending, say so.
 2. Post ONE review comment with:
    - **Design conformance:** each "Proposed approach" and "Test plan" item → ✅/⚠️/❌
    - **Undisclosed deviations:** anything not listed under "Deviations"
