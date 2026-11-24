@@ -1,0 +1,2 @@
+{"type": "user", "uuid": "u1", "parentUuid": null, "sessionId": "sess-meta", "timestamp": "2026-03-01T10:00:00.000Z", "cwd": "/work/demo", "gitBranch": "main", "isSidechain": false, "message": {"role": "user", "content": "<local-command-caveat>caveat</local-command-caveat>"}, "isMeta": true}
+{"type": "user", "uuid": "u2", "parentUuid": "u1", "sessionId": "sess-meta", "timestamp": "2026-03-01T10:00:01.000Z", "cwd": "/work/demo", "gitBranch": "main", "isSidechain": false, "message": {"role": "user", "content": "real question"}}

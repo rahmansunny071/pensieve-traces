@@ -36,6 +36,19 @@ session = Session.from_json(Path("session.json").read_text())
 session.tool_result_for("call-1")
 ```
 
+## Reading Claude Code sessions
+
+`pensieve_traces.readers.claude_code` turns raw Claude Code JSONL into canonical sessions (stdlib only). Only the conversation is kept: `user`, `assistant` and `system` records, plus the `ai-title` as `Session.title`. File backups, API request blobs, cost state and every other record type are skipped, and `toolUseResult` is never read.
+
+```python
+from pensieve_traces.readers.claude_code import read_project, read_session
+
+session = read_session("path/to/<session>.jsonl")
+sessions = read_project("path/to/project-dir")  # *.jsonl; subagent files merge into their session
+```
+
+Records sharing a `requestId` stay separate messages; token usage is attached only to the last one so sums are not double-counted. Malformed input raises `ClaudeCodeParseError` with the file path and line number. The reader does no redaction.
+
 ## How this repo is built: an agent factory
 
 Work happens through an issue-driven factory on Claude Code GitHub Actions. Agents write short designs, the maintainer signs off, then agents build, test and open PRs. Only the maintainer can start or advance work, merge to `main`, or publish anything.

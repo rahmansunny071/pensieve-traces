@@ -1,0 +1,1 @@
+{"type": "user", "uuid": "p0-u1", "parentUuid": null, "sessionId": "sess-p0", "timestamp": "2026-02-28T08:00:00.000Z", "cwd": "/work/demo", "gitBranch": "main", "isSidechain": false, "message": {"role": "user", "content": "older session"}}

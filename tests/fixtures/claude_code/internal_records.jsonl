@@ -1,0 +1,12 @@
+{"type": "user", "uuid": "u1", "parentUuid": null, "sessionId": "sess-internal", "timestamp": "2026-03-01T10:00:00.000Z", "cwd": "/work/demo", "gitBranch": "main", "isSidechain": false, "message": {"role": "user", "content": "visible question"}, "toolUseResult": {"content": "SENTINEL_TOOLUSERESULT"}}
+{"type": "file-history-snapshot", "messageId": "m1", "snapshot": {"trackedFileBackups": {"/work/demo/x": "SENTINEL_BACKUP"}}}
+{"type": "queue-operation", "operation": "enqueue", "content": "SENTINEL_QUEUE", "sessionId": "sess-internal"}
+{"type": "summary", "summary": "SENTINEL_SUMMARY", "leafUuid": "u1"}
+{"type": "progress", "uuid": "p1", "sessionId": "sess-internal", "data": {"x": "SENTINEL_PROGRESS"}}
+{"type": "attachment", "uuid": "at1", "sessionId": "sess-internal", "attachment": {"content": "SENTINEL_ATTACHMENT"}}
+{"type": "custom-title", "customTitle": "SENTINEL_CUSTOM_TITLE", "sessionId": "sess-internal"}
+{"type": "ai-title", "sessionId": "sess-internal", "aiTitle": "Internal demo", "extra": "SENTINEL_AI_TITLE_EXTRA"}
+{"type": "ai-title", "sessionId": "sess-internal", "aiTitle": {"nested": "SENTINEL_BAD_TITLE"}}
+{"type": "brand-new-type", "uuid": "n1", "payload": "SENTINEL_UNKNOWN"}
+{"uuid": "n2", "payload": "SENTINEL_NO_TYPE"}
+{"type": "assistant", "uuid": "a1", "parentUuid": "u1", "sessionId": "sess-internal", "timestamp": "2026-03-01T10:00:01.000Z", "cwd": "/work/demo", "gitBranch": "main", "isSidechain": false, "requestId": "req-1", "message": {"role": "assistant", "model": "model-x", "content": [{"type": "text", "text": "visible answer"}], "usage": {"input_tokens": 1, "output_tokens": 1, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0, "service_tier": "standard"}}}

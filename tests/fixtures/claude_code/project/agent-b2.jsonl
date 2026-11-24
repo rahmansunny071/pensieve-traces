@@ -1,0 +1,2 @@
+{"type": "ai-title", "sessionId": "sess-q", "aiTitle": "Title B2"}
+{"type": "user", "uuid": "b2-u1", "parentUuid": "b1-u1", "sessionId": "sess-q", "timestamp": "2026-03-02T09:00:01.000Z", "cwd": "/work/qb2", "gitBranch": "qb2", "isSidechain": false, "message": {"role": "user", "content": "b2"}}
