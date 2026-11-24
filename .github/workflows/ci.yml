@@ -37,6 +37,36 @@ jobs:
       - name: Run tests
         run: uv run --no-sync pytest -q
 
+  # Real redaction patterns (teich) only run with the optional [redact] extra installed.
+  # The job skips itself until pyproject.toml defines that extra (added by issue #3),
+  # so it can merge before the redaction code does.
+  test-redact:
+    name: Tests (redact)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Is the [redact] extra defined?
+        id: extra
+        run: |
+          if uv run --no-project --python 3.12 python -c "import sys, tomllib; d = tomllib.load(open('pyproject.toml', 'rb')); sys.exit(0 if 'redact' in d['project'].get('optional-dependencies', {}) else 1)"; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::pyproject.toml has no [redact] extra yet; skipping the real-redaction tests"
+          fi
+      - name: Install (locked, with redact)
+        if: steps.extra.outputs.present == 'true'
+        run: uv sync --locked --extra dev --extra redact --python 3.12
+      - name: teich is importable (so its tests run, not skip)
+        if: steps.extra.outputs.present == 'true'
+        run: uv run --no-sync python -c "import teich.anonymize"
+      - name: Run tests with teich installed
+        if: steps.extra.outputs.present == 'true'
+        run: uv run --no-sync pytest -q
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
