@@ -6,7 +6,7 @@ import json
 import sys
 import types
 import warnings
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import pytest
@@ -160,6 +160,19 @@ def test_project_redacted_with_or_without_trailing_slash(cwd):
     out = redact_session(session, StubAnonymizer())
     assert out.project is not None and "jdoe" not in out.project
     assert out.cwd is not None and "jdoe" not in out.cwd
+    assert out.project == PurePosixPath(out.cwd).name
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        '{"x":{"k":1,"k":2},"cmd":"echo jdoe@vexlor-mail.io',
+        '{"a":1,"a":2,"m":"jdoe@vexlor-mail.io"} x',
+    ],
+)
+def test_malformed_arguments_with_duplicate_key_fall_back_to_text(raw):
+    out = _args_out(raw)
+    assert "jdoe" not in out
 
 
 def test_project_follows_redacted_cwd_basename():
@@ -279,3 +292,23 @@ def test_real_teich_placeholders_are_consistent(real_session):
     assert placeholder in out.title
     assert placeholder in out.messages[0].text
     assert placeholder in out.messages[0].metadata["note"]
+
+
+def test_real_teich_project_with_trailing_slash_cwd(real_session):
+    out = redact_session(Session(id="s", cwd="/Users/jdoe/", project="jdoe"))
+    assert out.cwd is not None and "jdoe" not in out.cwd
+    assert out.project is not None and "jdoe" not in out.project
+    assert out.project == PurePosixPath(out.cwd).name
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        '{"x":{"k":1,"k":2},"cmd":"echo jdoe@vexlor-mail.io',
+        '{"a":1,"a":2,"m":"jdoe@vexlor-mail.io"} x',
+    ],
+)
+def test_real_teich_malformed_arguments_with_duplicate_key(real_session, raw):
+    real_session.messages[1].tool_calls[0].arguments = raw
+    out = redact_session(real_session).messages[1].tool_calls[0].arguments
+    assert "jdoe@vexlor-mail.io" not in out

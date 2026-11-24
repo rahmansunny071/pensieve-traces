@@ -65,7 +65,11 @@ def _redact_arguments(anonymizer: Anonymizer, arguments: str) -> str:
         # redaction would miss secrets in the earlier, shadowed values and the original string
         # (which still contains them) would be returned. Re-encode the redacted last-wins value
         # instead: shadowed duplicates are dropped, so no original text can survive.
-        decoded = json.loads(arguments)
+        try:
+            decoded = json.loads(arguments)
+        except ValueError:
+            # Invalid JSON that also has a duplicate key before the break: plain-text fallback.
+            return anonymizer.anonymize_text(arguments)
         return json.dumps(anonymizer.anonymize_value(decoded))
     except ValueError:
         return anonymizer.anonymize_text(arguments)
