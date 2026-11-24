@@ -23,6 +23,17 @@ pi (later)  ─┘            timestamp, role, text,      ├─ ConvoMem conver
 
 > **Privacy.** Traces can contain prompts, tool output, local paths, secrets, private code and personal data. Redaction is on by default, but review anything before you publish it, and keep datasets private when unsure.
 
+## Canonical model
+
+`pensieve_traces.model` defines the harness-neutral dataclasses `Session`, `Message`, `ToolCall`, `Usage` and the `Role` enum (no extra dependencies). Timestamps are timezone-aware, tool arguments stay a raw JSON string, and `Session.to_json()` / `Session.from_json()` round-trip losslessly. The model holds raw text and does no redaction.
+
+```python
+from pensieve_traces import Session
+
+session = Session.from_json(path.read_text())
+session.tool_result_for(call_id)
+```
+
 ## How this repo is built: an agent factory
 
 Work happens through an issue-driven factory on Claude Code GitHub Actions. Agents write short designs, the maintainer signs off, then agents build, test and open PRs. Only the maintainer can start or advance work, merge to `main`, or publish anything.
