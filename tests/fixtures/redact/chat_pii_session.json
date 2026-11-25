@@ -1,0 +1,63 @@
+{
+  "id": "chat-pii-0001",
+  "harness": "claude.ai",
+  "project": null,
+  "cwd": null,
+  "title": null,
+  "started_at": "2026-01-02T03:04:05+00:00",
+  "ended_at": null,
+  "git_branch": null,
+  "metadata": {},
+  "messages": [
+    {
+      "id": "email",
+      "role": "user",
+      "text": "Write to jane.doe@vexlor-mail.invalid about the rent."
+    },
+    {
+      "id": "ssn",
+      "role": "user",
+      "text": "My SSN is 987-65-4320."
+    },
+    {
+      "id": "iban",
+      "role": "user",
+      "text": "Pay into GB82WEST12345698765432 please."
+    },
+    {
+      "id": "card_number",
+      "role": "user",
+      "text": "My card is 4111 1111 1111 1111."
+    },
+    {
+      "id": "phone_call_me_at_10_digit",
+      "role": "user",
+      "text": "Call me at (555) 555-0142 after lunch."
+    },
+    {
+      "id": "phone_my_phone_is_7_digit",
+      "role": "user",
+      "text": "My phone is 555-0143."
+    },
+    {
+      "id": "street_address",
+      "role": "user",
+      "text": "I live at 42 Maple Lane, Springfield."
+    },
+    {
+      "id": "person_name",
+      "role": "user",
+      "text": "My sister Jane Doe is visiting."
+    },
+    {
+      "id": "health_detail",
+      "role": "user",
+      "text": "I was diagnosed with type 2 diabetes."
+    },
+    {
+      "id": "money_amount",
+      "role": "user",
+      "text": "I still owe $4,200 on the loan."
+    }
+  ]
+}
