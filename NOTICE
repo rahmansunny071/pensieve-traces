@@ -1,0 +1,8 @@
+pensieve-traces
+Copyright (c) the pensieve-traces authors
+
+The ConvoMem dataset builder's prompt files (pensieve_traces/builders/convomem/prompts/)
+are adapted from Salesforce ConvoMem, https://github.com/SalesforceAIResearch/ConvoMem,
+Copyright (c) 2024 Salesforce, Inc., licensed under the Apache License 2.0 (full text in
+pensieve_traces/builders/convomem/prompts/LICENSE-Apache-2.0.txt). They were modified by
+pensieve-traces: rewritten to extract candidate facts from existing conversations.

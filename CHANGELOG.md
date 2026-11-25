@@ -11,3 +11,4 @@
 - Unreleased: README states that uploading is always intentional: only `pensieve-traces upload` contacts the Hub.
 - Unreleased: Factory skill updated to agent-factory v0.6.0 (docs-with-code rule and Documentation tech-debt tracker; ready-to-merge hand-off when a merge is refused, agent-factory#32); new `factory:ready-to-merge` label.
 - Unreleased: Factory skill synced to agent-factory v0.8.0 with its new `sync-root-factory` skill (version marker `.claude/skills/factory/VERSION`), plus the `factory-lesson` skill; the Reality check now reads a `Real data:` line from `CLAUDE.md` (missing means `never`).
+- Unreleased: ConvoMem builder 1/3: `OpenAICompatibleClient` (stdlib, local Ollama by default) and `extract_candidates` find candidate memory facts in conversations, with a per-window cache; prompts adapted from Salesforce ConvoMem (Apache-2.0, `NOTICE`) (#8).
