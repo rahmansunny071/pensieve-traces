@@ -12,6 +12,14 @@ improvise them. Stdlib only; uses `gh`.
     python .claude/skills/factory/scripts/lanes.py project-add 40 4 6 --project 3   # + Priority
     python .claude/skills/factory/scripts/lanes.py show 40               # the lane's order
     python .claude/skills/factory/scripts/lanes.py --self-test
+
+Documentation debt: one open issue titled exactly "Documentation tech-debt" (labels `documentation`,
+`P2`) tracks doc todos as native sub-issues (labels `documentation`, `improvement`, `P2`).
+
+    python .claude/skills/factory/scripts/lanes.py doc-debt find         # find or create; prints #N
+    python .claude/skills/factory/scripts/lanes.py doc-debt add --title "README: …" --body-file f.md
+    python .claude/skills/factory/scripts/lanes.py doc-debt add --issue 44   # link an existing issue
+    python .claude/skills/factory/scripts/lanes.py doc-debt list         # open todos, for ride-alongs
 """
 
 from __future__ import annotations
@@ -19,10 +27,23 @@ from __future__ import annotations
 import argparse
 import itertools
 import json
+import re
 import subprocess
 import sys
 
 PRIORITIES = ("P0", "P1", "P2", "P3")
+DOC_DEBT_TITLE = "Documentation tech-debt"  # same exact title in queue.py and bootstrap.sh
+DOC_LABEL = "documentation"
+DOC_DEBT_LABELS = (DOC_LABEL, "P2")
+DOC_TODO_LABELS = (DOC_LABEL, "improvement", "P2")
+DOC_DEBT_BODY = (  # the same text bootstrap.sh uses
+    "Tracking issue for documentation todos (README, CHANGELOG, docstrings, design notes) that are"
+    " not blockers.\n\n"
+    "Each todo is a **sub-issue** of this one (labels `documentation`, `improvement`, `P2`). A fix can"
+    " ride along with the next PR that touches the same file; that PR closes the sub-issue. Keep this"
+    " title: the factory skill finds the issue by it.\n"
+)
+_ISSUE_URL = re.compile(r"/issues/(\d+)\s*$")
 
 
 def _gh(*args: str) -> str:
@@ -183,8 +204,133 @@ def project_add(r: str, numbers: list[int], project: int) -> None:
         print(f"#{n} on project {project}" + (f" ({level})" if level else ""))
 
 
+def pick_tracking(issues: list[dict]) -> int | None:
+    """The tracking issue among `gh issue list --json number,title,state,labels` results: open, titled
+    exactly DOC_DEBT_TITLE, labelled `documentation`. The oldest wins if there are several."""
+    found = sorted(
+        i["number"]
+        for i in issues
+        if i["title"] == DOC_DEBT_TITLE
+        and i.get("state", "OPEN").upper() == "OPEN"
+        and any(lb["name"] == DOC_LABEL for lb in i.get("labels", []))
+    )
+    if len(found) > 1:
+        print(f"several {DOC_DEBT_TITLE!r} issues: {found}; using #{found[0]}", file=sys.stderr)
+    return found[0] if found else None
+
+
+def issue_number_from_url(url: str) -> int:
+    m = _ISSUE_URL.search(url)
+    if not m:
+        raise SystemExit(f"unexpected output from gh issue create: {url!r}")
+    return int(m.group(1))
+
+
+def _label_names(r: str) -> set[str]:
+    return {
+        lb["name"]
+        for lb in json.loads(_gh("label", "list", "-R", r, "--limit", "1000", "--json", "name"))
+    }
+
+
+def ensure_labels(r: str, names: tuple[str, ...]) -> None:
+    have = _label_names(r)
+    for name in names:
+        if name not in have:
+            _gh("label", "create", name, "-R", r)
+            print(f"created label {name}", file=sys.stderr)
+
+
+def _children(r: str, parent: int) -> list[dict]:
+    """All sub-issues of `parent` (paginated: the tracking issue can outgrow one page)."""
+    out = _gh(
+        "api",
+        f"repos/{r}/issues/{parent}/sub_issues",
+        "--paginate",
+        "--jq",
+        ".[] | {number, title, state}",
+    )
+    return [json.loads(line) for line in out.splitlines() if line.strip()]
+
+
+def doc_debt_find(r: str, create: bool = True) -> int | None:
+    """The open "Documentation tech-debt" issue's number; create it (and its labels) if missing."""
+    issues = []
+    if DOC_LABEL in _label_names(r):
+        fields = "number,title,state,labels"
+        listing = ["issue", "list", "-R", r, "--state", "open", "--label", DOC_LABEL]
+        issues = json.loads(_gh(*listing, "--limit", "1000", "--json", fields))
+    n = pick_tracking(issues)
+    if n is None and create:
+        ensure_labels(r, DOC_DEBT_LABELS)
+        args = ["issue", "create", "-R", r, "--title", DOC_DEBT_TITLE, "--body", DOC_DEBT_BODY]
+        for label in DOC_DEBT_LABELS:
+            args += ["--label", label]
+        n = issue_number_from_url(_gh(*args).strip())
+        print(f"created #{n}: {DOC_DEBT_TITLE}", file=sys.stderr)
+    return n
+
+
+def doc_debt_add(r: str, title: str | None, body_file: str | None, existing: int | None) -> int:
+    """File a doc todo (or label an existing issue as one) and link it under the tracking issue."""
+    parent = doc_debt_find(r)
+    assert parent is not None
+    ensure_labels(r, DOC_TODO_LABELS)
+    if existing is None:
+        args = ["issue", "create", "-R", r, "--title", title, "--body-file", body_file]
+        for label in DOC_TODO_LABELS:
+            args += ["--label", label]
+        child = issue_number_from_url(_gh(*args).strip())
+    else:
+        child = existing
+        args = ["issue", "edit", str(child), "-R", r]
+        for label in DOC_TODO_LABELS:
+            args += ["--add-label", label]
+        _gh(*args)
+    if any(c["number"] == child for c in _children(r, parent)):
+        print(f"#{child} already under #{parent}", file=sys.stderr)
+    else:
+        _gh(
+            "api",
+            "-X",
+            "POST",
+            f"repos/{r}/issues/{parent}/sub_issues",
+            "-F",
+            f"sub_issue_id={issue_id(r, child)}",
+        )
+        print(f"#{child} is now a sub-issue of #{parent} ({DOC_DEBT_TITLE})", file=sys.stderr)
+    return child
+
+
+def doc_debt_list(r: str) -> list[dict]:
+    """Open doc todos ({number, title}); empty when there's no tracking issue yet."""
+    parent = doc_debt_find(r, create=False)
+    if parent is None:
+        return []
+    todos = [c for c in _children(r, parent) if c["state"] == "open"]
+    return [{"number": c["number"], "title": c["title"]} for c in todos]
+
+
 def _self_test() -> None:
     assert PRIORITIES == ("P0", "P1", "P2", "P3")
+
+    def iss(n, title=DOC_DEBT_TITLE, state="OPEN", labels=(DOC_LABEL, "P2")):
+        return {
+            "number": n,
+            "title": title,
+            "state": state,
+            "labels": [{"name": x} for x in labels],
+        }
+
+    assert pick_tracking([]) is None
+    assert pick_tracking([iss(43)]) == 43
+    assert pick_tracking([iss(50), iss(43)]) == 43  # the oldest wins
+    assert pick_tracking([iss(43, state="CLOSED")]) is None
+    assert pick_tracking([iss(43, labels=("P2",))]) is None  # must carry `documentation`
+    assert pick_tracking([iss(43, title="Documentation tech-debt (old)")]) is None  # exact title
+    assert pick_tracking([iss(43, title="documentation tech-debt")]) is None
+    assert issue_number_from_url("https://github.com/o/r/issues/44\n") == 44
+    assert DOC_TODO_LABELS == ("documentation", "improvement", "P2")
     print("lanes.py self-test: ok")
 
 
@@ -209,7 +355,19 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--project", type=int, required=True)
     p = sub.add_parser("show", help="print a lane's sub-issues in order")
     p.add_argument("lane", type=int)
+    p = sub.add_parser("doc-debt", help=f"the {DOC_DEBT_TITLE!r} tracking issue and its todos")
+    dd = p.add_subparsers(dest="doc_cmd", required=True)
+    dd.add_parser("find", help="print the tracking issue's number, creating it if missing")
+    q = dd.add_parser("add", help="file a doc todo (or link an existing issue) as a sub-issue")
+    src = q.add_mutually_exclusive_group(required=True)
+    src.add_argument("--title", help="title of a new todo (needs --body-file)")
+    src.add_argument("--issue", type=int, help="an existing issue to link instead")
+    q.add_argument("--body-file", help="body of the new todo: which doc, what's wrong, the fix")
+    q = dd.add_parser("list", help="open todos (number and title), for the builder's ride-alongs")
+    q.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
+    if args.cmd == "doc-debt" and args.doc_cmd == "add" and args.title and not args.body_file:
+        parser.error("doc-debt add --title needs --body-file")
     if args.self_test:
         _self_test()
         return 0
@@ -229,6 +387,17 @@ def main(argv: list[str] | None = None) -> int:
         project_add(r, args.issues, args.project)
     elif args.cmd == "show":
         print(" → ".join(f"#{n}" for n in sub_issues(r, args.lane)) or "(no sub-issues)")
+    elif args.cmd == "doc-debt":
+        if args.doc_cmd == "find":
+            print(f"#{doc_debt_find(r)}")
+        elif args.doc_cmd == "add":
+            print(f"#{doc_debt_add(r, args.title, args.body_file, args.issue)}")
+        else:
+            todos = doc_debt_list(r)
+            if args.json:
+                print(json.dumps(todos, indent=2))
+            else:
+                print("\n".join(f"#{t['number']}  {t['title']}" for t in todos) or "(none)")
     return 0
 
 

@@ -65,7 +65,12 @@ changing lint rules, the ruff pin, or skipping tests.
   in the writer's module docstring:
   - STS: https://huggingface.co/docs/hub/main/en/session-traces-format
   - Agent traces on the Hub: https://huggingface.co/docs/hub/main/en/agent-traces
-- Every user-visible change updates README.md and CHANGELOG.md.
+- Every code change ships its docs in the same PR: new docs for new behaviour,
+  and updates to any doc it makes wrong or stale (README, CHANGELOG,
+  docstrings, `.factory/designs/`). Docs that disagree with the PR's code break
+  this rule, so they're a blocker even in `mvp`. Mismatches outside the PR's
+  diff aren't fixed in it: file them as sub-issues of the "Documentation
+  tech-debt" issue (#43).
 
 ## Style
 - Match existing code style; ruff is the formatter of record.

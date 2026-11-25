@@ -18,7 +18,7 @@ This repo is built by an issue-driven agent factory (see `README.md` → "How th
 **builder** plans and codes, a fresh Opus **reviewer** checks the result, and you merge when the gates
 pass. The maintainer answers questions **asynchronously on the PR**; the run never sits waiting.
 
-Three principles shape everything below. All of them came out of real runs:
+Four principles shape everything below. All of them came out of real runs:
 
 1. **Urgency over completeness.** Before the project's first release (`Release phase: mvp` in
    `CLAUDE.md`), the goal is a main path that works end to end, then iteration. Only **blockers** are
@@ -57,7 +57,11 @@ When the run log or memory disagrees with GitHub, GitHub wins.
    **issues waiting on the maintainer and whether they've replied**, and the ready queue.
    `runlog.py status` shows the local log's view. If anything is in progress or has new replies, handle
    that first (see "Resume").
-6. **Long runs.** Your own context grows with every step. After 2–3 issues, or when the session feels
+6. **Documentation tech-debt.** `python .claude/skills/factory/scripts/lanes.py doc-debt find` prints the
+   tracking issue's number (an open issue titled exactly "Documentation tech-debt", labelled
+   `documentation`), creating it if it's missing, so repos bootstrapped before v0.6.0 work too. Every
+   documentation todo that isn't fixed in the PR at hand becomes a sub-issue of it (`doc-debt add`).
+7. **Long runs.** Your own context grows with every step. After 2–3 issues, or when the session feels
    long, finish the current step, write the run summary and suggest a fresh session. GitHub and the run
    log let it pick up cleanly.
 
@@ -90,6 +94,10 @@ A two-level conversation with the maintainer (you, Opus, in the main session), t
      `project-add … --project <N>` if the repo has a factory Project board (see `CLAUDE.md` or `gh project
      list`).
    Check with `queue.py` that the lanes, order and dependencies come out as agreed.
+6. **Documentation todos** that come up while planning (a stale README section, a missing docstring) go
+   under the tracking issue with `lanes.py doc-debt add --title … --body-file …`, not as loose issues or
+   lane issues. A doc change that a planned issue makes necessary belongs in that issue's acceptance
+   criteria instead (the hard rule: docs ship with their code).
 
 ## Mode 2: Run the factory
 
@@ -125,7 +133,8 @@ origin/main`. The `local/` prefix keeps the GitHub Actions factory (which review
 branches) from also reviewing skill PRs. Pass subagents **absolute paths**. Set `factory:designing`. Log
 each step with `runlog.py add`.
 
-**1. Plan (Sonnet builder, phase 1).** Spawn the builder with the "Builder" brief, phase 1: it writes
+**1. Plan (Sonnet builder, phase 1).** Run `lanes.py doc-debt list` and paste the open doc todos into the
+brief's ride-along slot. Spawn the builder with the "Builder" brief, phase 1: it writes
 `.factory/designs/issue-N.md`, commits on `local/issue-N`, pushes, opens a **draft PR** ("feat: … (#N)",
 `Closes #N`) and **stops**, returning the plan. Keep the agent's id: the same agent builds and fixes.
 
@@ -142,13 +151,20 @@ each step with `runlog.py add`.
   that label, because it starts the GitHub Actions build. Set `factory:building`.
 
 **3. Build (same builder, phase 2).** `SendMessage` the builder: "plan approved, build it" (plus notes). It
-implements, runs every `CLAUDE.md` check until green, fills in the PR body (**Handoff**, "Checks run",
-"Deviations"), marks the PR ready for review and sets `factory:review`. Verify all of that, especially
-that the Handoff section exists.
+implements, **updates the docs the change affects** (new docs for new behaviour; any README, CHANGELOG,
+docstring or `.factory/designs/` text the change makes wrong or stale), runs every `CLAUDE.md` check until
+green, fills in the PR body (**Handoff** with its **Docs** line, "Checks run", "Deviations"), marks the PR
+ready for review and sets `factory:review`. **Ride-alongs:** if the PR already touches a file that an open
+doc-debt sub-issue is about, the builder fixes that todo too and the PR body says `Closes #<todo>`; it
+never opens other files just for doc-debt. Verify all of that, especially that the Handoff section and
+its Docs line exist.
 
 **4. Review ∥ CI.** Start the fresh Opus "Code reviewer" **while CI runs**. It posts **one review with
-inline, line-anchored comments**, each tagged `blocker`, `improvement` or `question`. Wait on CI with a
-bounded run-level watch (`references/gates.md` → gate 1).
+inline, line-anchored comments**, each tagged `blocker`, `improvement`, `doc-debt` or `question`. It also
+checks that **docs and code agree in the changed area**: a mismatch the PR causes (a doc it should have
+updated, or a doc it changed wrongly) is a `blocker`, because it breaks a hard rule; a mismatch that was
+already there before the PR is `doc-debt`. Wait on CI with a bounded run-level watch
+(`references/gates.md` → gate 1).
 
 **5. Fix blockers (same builder).** `SendMessage` the blocker list, with reproductions. The builder fixes
 them, adds a failing-without-the-fix test for each, re-runs the checks, pushes, **updates the Handoff**, and
@@ -161,12 +177,18 @@ and continue**. Otherwise go on.
 
 **7. Improvements.** Write **one** `improvement` issue yourself listing the non-blocking findings (with
 links to their review threads), `Depends on #N`, labelled `improvement`. Then resolve those threads with a
-reply pointing at the issue. Never make a main-path issue depend on it.
+reply pointing at the issue. Never make a main-path issue depend on it. **`doc-debt` findings don't go in
+it:** file each as a sub-issue of the tracking issue (`lanes.py doc-debt add --title … --body-file …`,
+body: which doc, what's wrong, the fix, a link to the thread), then resolve its thread with a reply
+linking the sub-issue.
 
 **8. Merge.** Check every gate in `references/gates.md` on the PR's current commit, **including "all
 review threads resolved"**. Append the Handoff's gist to `.factory/designs/issue-N.md` (one commit on the
-branch, so the rationale lands on `main` next to the code). Then `gh pr merge <PR> --merge --admin
---delete-branch`, post the merge note, log it, pull `main`, remove the worktree, and run `queue.py` again.
+branch, so the rationale lands on `main` next to the code). Then try the merge (the command and when
+`--admin` applies are in `references/gates.md` → "Merge"). If it goes through, post the merge note, log it,
+pull `main`, remove the worktree, and run `queue.py` again. **If it is refused** (the harness denies the
+command, or GitHub rejects it), that is not an error: follow "Ready to merge and continue" below. **Never
+work around a refusal**: no retry through `gh api .../pulls/N/merge`, other flags or another tool.
 
 ### Flag and continue
 
@@ -192,6 +214,25 @@ These go to the maintainer this way:
 - two consecutive rounds with blockers in the same area (the premise may be wrong);
 - an unverifiable assumption about real data (see "Reality check");
 - a subagent that added `factory:blocked`.
+
+### Ready to merge and continue
+
+When every gate passes but the merge itself is refused, the maintainer merges it, not you:
+
+1. Re-check `gh pr view <PR> --json state` once. If the PR is still open, hand it off. **Do not try any
+   other way to merge it.**
+2. Add `factory:ready-to-merge` to the **issue and the PR**. Remove the in-progress label.
+3. Post **one** PR comment: the line `Ready to merge: all gates pass on <sha>.`, the exact merge command in
+   a code block (the one that fits `mergeStateStatus`, see `references/gates.md` → "Merge"), and the
+   gate summary from the merge note.
+4. Log a `ready-to-merge` step.
+5. **Move on.** The issue stays open, so its lane's later issues wait; other lanes carry on.
+   `queue.py` lists these under "Waiting for you to merge", and "When you're done" reports them so the
+   maintainer can merge them in one batch. Once the PR is merged the issue closes and the lane advances;
+   if the label is still on a closed issue, remove it.
+
+The maintainer can let the skill merge itself by opting in to a permission rule (README → "Letting the
+factory merge for you"). The template never ships it.
 
 ### Resume
 
@@ -247,7 +288,9 @@ answer right away; resume handles it.
 model and role. Report:
 - issues merged (PR links);
 - **issues waiting on the maintainer**, with links to their open threads;
-- improvements filed;
+- **PRs ready to merge** (`factory:ready-to-merge`), with the merge command for each, so the maintainer
+  can merge them in one batch;
+- improvements and doc-debt sub-issues filed;
 - decisions made on the maintainer's behalf;
 - the cost summary.
 
@@ -260,9 +303,9 @@ template as a `lesson` issue.
 - `references/briefs.md`: prompts for every subagent, the builder's follow-up messages, and the Handoff
   format.
 - `references/gates.md`: merge gates (including all threads resolved), bounded CI waits, posting and
-  resolving review threads, and the merge command.
+  resolving review threads, and the merge command and what to do when it is refused.
 - `scripts/queue.py`: the lane-aware queue (each lane's current issue and state, "Work now" for
-  `--lanes N`, issues outside lanes).
+  `--lanes N`, PRs waiting for you to merge, issues outside lanes; the doc-debt tracking issue is left out).
 - `scripts/lanes.py`: create and maintain lanes with native GitHub features (`sub-add`, `order`, `block`,
-  `priority`, `project-add`, `show`).
+  `priority`, `project-add`, `show`), and the documentation tech-debt issue (`doc-debt find|add|list`).
 - `scripts/runlog.py`: the run log (`add`, `status`, `summary`).

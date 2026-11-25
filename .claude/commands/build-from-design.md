@@ -7,8 +7,11 @@ You are the BUILD agent for issue #$ARGUMENTS. The approved spec is
 
 1. Create branch factory/issue-$ARGUMENTS from the current (design) branch.
 2. Implement exactly what the design says. Add or update the tests and synthetic
-   fixtures listed in the Test plan. Update README.md and CHANGELOG.md for
-   user-visible changes.
+   fixtures listed in the Test plan. Docs ship with the code (CLAUDE.md hard
+   rule): write docs for new behaviour, and update every README, CHANGELOG,
+   docstring or .factory/designs/ passage the change makes wrong or stale.
+   Don't fix doc problems outside your diff; list them under "Docs" so the
+   maintainer can file them under the "Documentation tech-debt" issue.
 3. Run every step of "Definition of checks pass" in CLAUDE.md. Fix and re-run
    until all pass. If you can't get them green after a real effort, stop.
    If a command you need is denied or unavailable, never exit quietly: comment
@@ -22,6 +25,7 @@ You are the BUILD agent for issue #$ARGUMENTS. The approved spec is
    Closes #$ARGUMENTS
    Design: .factory/designs/issue-$ARGUMENTS.md
    ## Summary
+   ## Docs (the docs updated, or "none needed" and why)
    ## Checks run (paste the commands and pass/fail)
    ## Deviations from design (or "None")
 6. Close the draft design PR with a comment linking the new PR (the design
