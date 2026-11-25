@@ -9,4 +9,4 @@
 - Unreleased: `convert` refuses an `--out` directory that would overwrite the input session files (#36).
 - Unreleased: ConvoMem conversations export (`convert --to convomem-conversations`, `write_conversations`, `sessions_to_conversations`) with a message-ID map (#5).
 - Unreleased: README states that uploading is always intentional: only `pensieve-traces upload` contacts the Hub.
-- Unreleased: Factory skill updated to agent-factory main (v0.6.0 docs-with-code rule and Documentation tech-debt tracker; ready-to-merge hand-off when a merge is refused, agent-factory#32); new `factory:ready-to-merge` label.
+- Unreleased: Factory skill updated to agent-factory v0.6.0 (docs-with-code rule and Documentation tech-debt tracker; ready-to-merge hand-off when a merge is refused, agent-factory#32); new `factory:ready-to-merge` label.
