@@ -53,7 +53,11 @@ def _default_anonymizer() -> Anonymizer:
 # part of the domain) is left to teich while ``a@b.invalid.`` and ``a@b.invalid.\u201d`` are caught.
 _EMAIL_DOT = re.compile(
     r"(?<![A-Za-z0-9._%+-])([A-Za-z0-9][A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]*"
-    r"@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*)(\.+)(?![A-Za-z0-9_%+-])"
+    r"@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*)(\.+)(?![.A-Za-z0-9_%+-])"
+)
+# teich's own email pattern (without its lookbehind/lookahead), to check a candidate is exactly one.
+_TEICH_EMAIL = re.compile(
+    r"[A-Za-z0-9][A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]*@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"
 )
 
 
@@ -71,7 +75,16 @@ class _EmailPeriodGuard:
     def _pre(self, text: str) -> str:
         if "@" not in text:
             return text
-        return _EMAIL_DOT.sub(lambda m: self._inner.anonymize_text(m[1]) + m[2], text)
+        return _EMAIL_DOT.sub(self._replace, text)
+
+    def _replace(self, m: re.Match[str]) -> str:
+        addr = m[1]
+        # teich's local part also matches ``KEY=value`` assignments; hand those (and anything
+        # teich would not read as exactly one address) to teich's own rules unchanged, or only a
+        # piece of a secret like ``password=P@ssw0rd.!x`` would be redacted.
+        if "=" in addr or not _TEICH_EMAIL.fullmatch(addr):
+            return m[0]
+        return self._inner.anonymize_text(addr) + m[2]
 
     def _walk(self, value: Any) -> Any:
         if isinstance(value, str):

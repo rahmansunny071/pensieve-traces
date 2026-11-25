@@ -90,3 +90,24 @@ def test_trailing_period_email_gets_the_bare_address_placeholder() -> None:
     assert redacted["email_period"] == f"Mail {placeholder}."
     assert redacted["email_period_paren"] == f"(contact {placeholder}.)"
     assert redacted["email_curly_quote"] == f"She wrote \u201c{placeholder}.\u201d"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "export DB_PASSWORD=P@ssw0rd.!Abc9",
+        "password=admin@db.internal.(Xy9z)",
+        "password=P@ssw0rd.!Abc9",
+    ],
+)
+def test_guard_never_redacts_less_than_teich_alone(text: str) -> None:
+    pytest.importorskip("teich.anonymize")
+    from teich.anonymize import TraceAnonymizer
+
+    session = Session.from_json(FIXTURE.read_text(encoding="utf-8"))
+    session.messages = session.messages[:1]
+    session.messages[0].text = text
+    guarded = redact_session(session, TraceAnonymizer()).messages[0].text
+    assert guarded == TraceAnonymizer().anonymize_text(text)
+    for tail in (".!Abc9", "(Xy9z)", "Abc9"):
+        assert tail not in guarded

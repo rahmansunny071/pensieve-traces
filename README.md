@@ -55,7 +55,7 @@ copy = redact_session(session)  # scrubbed deep copy, input untouched
 | health detail | no |
 | money amount | no |
 
-Not covered: an address followed by a period and then a single letter or digit with no space (`name@host.invalid.I will`, `.5`), which teich also misses. Phone and address matching depends on the surrounding phrasing (teich 0.3.8 replaces an address only after phrases like "I live at" or "address:"; "My address is …", "Send it to …" and "Deliver to …" are left as is). Redaction does not catch chat personal data in general: review claude.ai traces before sharing them.
+Not covered: an address followed by a period and then a letter, digit, `-`, `_`, `%` or `+` with no space (`name@host.invalid.I will`, `.5`, `.2024`, `.-x`), which teich also misses. Phone and address matching depends on the surrounding phrasing (teich 0.3.8 replaces an address only after phrases like "I live at" or "address:"; "My address is …", "Send it to …" and "Deliver to …" are left as is). Redaction does not catch chat personal data in general: review claude.ai traces before sharing them.
 
 ## Canonical model
 

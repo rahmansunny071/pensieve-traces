@@ -409,9 +409,30 @@ def test_email_at_end_of_text_and_other_cases():
 
 def test_domain_continuation_and_plain_periods_are_left_alone_by_the_guard():
     fake = FakeTeich()
-    # not an email followed by a period: the guard must not touch these
-    text = "v1.2. See file.txt. Mail me@example.com."
-    assert redact_session(_session_with(text), fake).messages[0].text == text
+    # the guard must not touch these: no address, or a domain that continues past the period
+    # (a@b.invalid.com is teich's to match). me@example.com. is an address followed by a period;
+    # the guard hands it to the fake, which leaves @example.com alone, so the text is unchanged.
+    text = "v1.2. See file.txt. Mail me@example.com. or a@b.invalid.com"
+    out = redact_session(_session_with(text), fake).messages[0].text
+    assert out == text.replace("a@b.invalid.com", fake.map["a@b.invalid.com"])
+    assert set(fake.map) == {"a@b.invalid.com"}
+
+
+def test_guard_leaves_assignments_and_non_teich_candidates_to_the_anonymizer():
+    fake = FakeTeich()
+    # "=" is legal in teich's local part, so the candidate would be "key=sam@...": skip it, or a
+    # secret like password=P@ssw0rd.!x would only be redacted in part.
+    # f"{ADDR}..x": the period run is followed by a letter, so it is not a boundary (teich's own
+    # lookahead rejects "." too); backtracking to one period must not make it one.
+    for text in (
+        f"key={ADDR}.",
+        "password=P@ssw0rd.!Abc9",
+        "x@y.in1.",
+        "x@localhost.",
+        f"{ADDR}..x",
+    ):
+        out = redact_session(_session_with(text), fake).messages[0].text
+        assert out == text, text
     assert fake.map == {}
 
 
