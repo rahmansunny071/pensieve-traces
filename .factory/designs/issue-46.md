@@ -38,3 +38,11 @@ None blocking. Unverified: whether the STS viewer special-cases an unfamiliar `h
 
 ## Size estimate
 M
+
+## Implementation notes
+
+- Built as planned in `pensieve_traces/readers/claude_ai.py` (`read_export`, `ClaudeAiParseError`, `HARNESS`), stdlib only, PR #56.
+- Design review (6055137015) changes: Claude Code's id contract (the last derived message keeps the bare uuid, earlier ones get `<uuid>#<i>`, so the next source message's parent link lands on the last piece); each `injected_prompt_block` is its own `is_meta` USER message; tests for both input forms, decoy manifest/memories files and timezone-aware timestamps.
+- Deviation: derived ids use the position among derived messages, not the raw block index (same as the Claude Code reader).
+- Code review (6055228644): READY. One doc/code mismatch fixed before merge (266bb3e): an unknown `sender` now raises on every branch, not only the kept path. Robustness gaps on unverified export shapes (no parent key, no `content`, duplicate file placeholders, zip input) and writer-flow test asserts → #58.
+- Docs: README "Reading claude.ai exports" (says `convert` doesn't take exports yet; that's #47), intro and readers diagram, STS status row (closes #44); CLAUDE.md's description is left for a separate change (#50).
