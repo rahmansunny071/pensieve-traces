@@ -41,3 +41,10 @@ Offline, synthetic `tests/fixtures/claude_ai/export/` only, with the fake teich 
 
 ## Size estimate
 S
+
+## Implementation notes
+
+- Built as planned, PR #60: public `load_sessions(input_path, source=None)` in `pensieve_traces/cli.py` replaces `_load` (no printing; #55 calls it per input) and `convert --from {claude-code,claude-ai}` overrides auto-detection. `ClaudeAiParseError` is caught in `main`. `_check_out_dir` is unchanged and already covers the export directory and the directory of `conversations.json`; tests lock that in.
+- Code review (6055447571): READY, no blockers. Verified by the reviewer: redaction over every export field with the real teich extra, the data-loss guard (input checksum unchanged), and byte-identical Claude Code output against `main`.
+- Follow-ups → #62: exact-id ConvoMem test, `load_sessions` accepting `str`, one `--no-redact` warning instead of one per session, guard wording for exports, header-only STS files for empty conversations.
+- Open for the maintainer: whether the Hub renders `harness: "claude.ai"` (upload one synthetic trace to a private dataset).
