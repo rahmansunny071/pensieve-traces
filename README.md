@@ -66,7 +66,7 @@ Records sharing a `requestId` stay separate messages; token usage is attached on
 
 ## Reading claude.ai exports
 
-`pensieve_traces.readers.claude_ai` turns a claude.ai data export (Settings, Privacy, Export data) into canonical sessions, one per conversation (stdlib only). It reads only `conversations.json`; the account block, memories, projects, artifacts, `light_metadata` and the manifest (which holds signed download URLs) are never opened. The `convert` command does not accept exports yet (#47); use the Python API.
+`pensieve_traces.readers.claude_ai` turns a claude.ai data export (Settings, Privacy, Export data) into canonical sessions, one per conversation (stdlib only). It reads only `conversations.json`; the account block, memories, projects, artifacts, `light_metadata` and the manifest (which holds signed download URLs) are never opened. `pensieve-traces convert` accepts exports too (see below).
 
 ```python
 from pensieve_traces.readers.claude_ai import read_export
@@ -82,15 +82,18 @@ sessions = read_export("path/to/export-dir")  # or path/to/conversations.json
 
 ## Converting to STS
 
-`pensieve-traces convert` turns a Claude Code session file or project directory into [STS](https://huggingface.co/docs/hub/main/en/session-traces-format) JSONL for the Hugging Face trace viewer, one `<session id>.jsonl` per session (stdlib only):
+`pensieve-traces convert` turns a Claude Code session file or project directory, or a claude.ai export, into [STS](https://huggingface.co/docs/hub/main/en/session-traces-format) JSONL for the Hugging Face trace viewer, one `<session id>.jsonl` per session (stdlib only):
 
 ```bash
 pip install "pensieve-traces[redact]"
 pensieve-traces convert path/to/<project-dir> --to sts --out traces/
+pensieve-traces convert path/to/claude-export --to sts --out traces/   # claude.ai export
 ```
 
+- Input is detected: a directory with `conversations.json` and no `*.jsonl` (or a file named `conversations.json`) is a claude.ai export; a directory of `*.jsonl` files or one session file is Claude Code. A directory holding both is refused as ambiguous, and one holding neither is an error. `--from claude-code` or `--from claude-ai` forces the reader. Exports write one `<conversation uuid>.jsonl` per conversation with `harness: "claude.ai"` in the header; attachment text is left out. The Hub's rendering of the `claude.ai` harness id is unverified (STS only lists `llama.app`).
+
 - Redaction is on by default. Without the `redact` extra the command exits with an error and writes nothing; pass `--no-redact` to write unredacted output (a warning is printed).
-- `--out` must not be the input directory (or inside it), nor the directory of an input file: Claude Code names sessions `<session id>.jsonl`, so writing there would overwrite the originals. The command refuses and writes nothing.
+- `--out` must not be the input directory (or inside it), nor the directory of an input file (for an export, its directory): Claude Code names sessions `<session id>.jsonl`, so writing there would overwrite the originals. The command refuses and writes nothing.
 - Sidechain (subagent) messages are skipped; add `--include-sidechains` to keep them.
 - Fields STS has no place for are dropped: parent ids, usage, request ids, `is_meta`/`is_error` flags, metadata, `cwd`, `project`, branch and session start/end times. Meta messages are still written.
 - From Python: `pensieve_traces.writers.sts.write_session(session, path)` and `session_to_sts_lines(session)` (the latter does not redact).
@@ -101,7 +104,10 @@ pensieve-traces convert path/to/<project-dir> --to sts --out traces/
 
 ```bash
 pensieve-traces convert path/to/<project-dir> --to convomem-conversations --out convomem/
+pensieve-traces convert path/to/claude-export --to convomem-conversations --out convomem/
 ```
+
+Input is detected as for STS (a claude.ai export gives one conversation per chat; `--from` overrides).
 
 `--out` is a directory and receives two files:
 
