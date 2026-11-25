@@ -44,12 +44,14 @@ If ci.yml changes, update this list to match. Never "fix" a failure by
 changing lint rules, the ruff pin, or skipping tests.
 
 ## Hard rules
-- Never commit real agent traces or session files, and never read
-  ~/.claude, ~/.codex or any other host session directory. Tests use small,
+- Never commit real agent traces, session files or chat exports. Tests use small,
   hand-written synthetic fixtures under tests/fixtures/ with no real paths,
   emails, names, secrets or private code.
 - Never upload anything to the Hugging Face Hub, PyPI or any other service, and
   never ask for or use HF_TOKEN, PRIME_API_KEY or any other credential.
+- Uploading is always intentional: only an explicit `pensieve-traces upload`
+  run sends anything to the Hub. No other command, writer, builder, default or
+  test uploads or contacts the Hub.
 - Never call paid model endpoints. Code that needs an LLM (e.g. the ConvoMem
   Q/A builder) takes an injectable client, and tests use a fake one.
 - Redaction must default to ON for anything that writes shareable output.

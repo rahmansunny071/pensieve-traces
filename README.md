@@ -95,7 +95,7 @@ Only user prompts and assistant prose are kept; meta, sidechain, system and tool
 
 ## Uploading to the Hub
 
-`pensieve-traces upload` pushes converted traces to a Hugging Face dataset, **private by default**. It needs the optional extra and your own login (`hf auth login`); the tool never asks for, stores or prints a token.
+`pensieve-traces upload` pushes converted traces to a Hugging Face dataset, **private by default**. Uploading is always intentional: `upload` is the only command that contacts the Hub, and `convert` and every other command only write local files. It needs the optional extra and your own login (`hf auth login`); the tool never asks for, stores or prints a token.
 
 ```bash
 pip install "pensieve-traces[hub]"

@@ -8,3 +8,4 @@
 - Unreleased: `pensieve-traces upload` to a private Hugging Face dataset (optional `pensieve-traces[hub]` extra); STS writer adds the `pensieveRedacted` header key (#6).
 - Unreleased: `convert` refuses an `--out` directory that would overwrite the input session files (#36).
 - Unreleased: ConvoMem conversations export (`convert --to convomem-conversations`, `write_conversations`, `sessions_to_conversations`) with a message-ID map (#5).
+- Unreleased: README states that uploading is always intentional: only `pensieve-traces upload` contacts the Hub.
