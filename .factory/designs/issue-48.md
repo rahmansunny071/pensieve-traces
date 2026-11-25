@@ -10,23 +10,25 @@ Redaction (teich `TraceAnonymizer`) was tuned on coding sessions; claude.ai chat
 4. NEW `upload.count_harness(files, harness) -> int`: first line only, exact `harness` match (`Claude.ai`, missing, empty, non-JSON, `[1]`, non-UTF-8 count 0, never raise). Shared `_read_header` helper also used by the redaction-marker check.
 5. CHANGED `cli._upload`: after the summary, before the `--yes`/`_confirm()` branch, `_warn` if count > 0 (`HARNESS` imported from `readers.claude_ai`). Never refuses.
 
-Warning text (`n` files, singular "1 file is"): `{n} files are claude.ai chats (harness "claude.ai"); redaction does not catch names, health details, money amounts or card and bank account numbers, and catches only some phone numbers. Review them before uploading.`
+Warning text (`n` files, singular "1 file is"): `{n} files are claude.ai chats (harness "claude.ai"); redaction does not catch names, health details, money amounts or card and bank account numbers, and catches only some addresses and phone numbers. Review them before uploading.`
 
 Pinned table (teich 0.3.8, measured):
 | kind (value) | replaced |
 |---|---|
 | email (`jane.doe@vexlor-mail.invalid`) | yes |
-| ssn (`987-65-4320`) | yes |
+| ssn_dashed (`987-65-4320`) | yes |
 | phone_call_me_at_10_digit (`(555) 555-0142`) | yes |
-| street_address (`42 Maple Lane`) | yes |
+| address_after_i_live_at (`42 Maple Lane`) | yes |
 | phone_my_phone_is_7_digit (`555-0143`) | no |
+| ssn_undashed (`987654320`) | no |
+| address_send_it_to (`42 Maple Lane`) | no |
 | iban (`GB82WEST12345698765432`) | no |
 | card_number (`4111 1111 1111 1111`) | no |
 | person_name (`Jane Doe`) | no |
 | health_detail (`type 2 diabetes`) | no |
 | money_amount (`$4,200`) | no |
 
-Note: the address match swallows the rest of its sentence ("42 Maple Lane, Springfield." becomes one placeholder), so coverage is trigger-phrase based.
+Note: teich 0.3.8 replaces an address only after phrases like "I live at" or "address:", and phones depend on phrasing too, so coverage is trigger-phrase based.
 
 ## Alternatives rejected
 - Refuse upload of claude.ai files: the issue says warn, never refuse.

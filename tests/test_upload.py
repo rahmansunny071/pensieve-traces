@@ -265,7 +265,7 @@ def test_warning_with_yes_names_count_and_gaps(tmp_path: Path, hub: type[FakeApi
     assert (
         'pensieve-traces: warning: 2 files are claude.ai chats (harness "claude.ai"); '
         "redaction does not catch names, health details, money amounts or card and bank "
-        "account numbers, and catches only some phone numbers. Review them before uploading."
+        "account numbers, and catches only some addresses and phone numbers. Review them before uploading."
     ) in err
     assert len(commit_call()["operations"]) == 3
 

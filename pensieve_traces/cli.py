@@ -209,8 +209,8 @@ def _upload(args: argparse.Namespace) -> None:
         _warn(
             f"{chats} {'file is' if chats == 1 else 'files are'} claude.ai chats "
             f'(harness "{claude_ai.HARNESS}"); redaction does not catch names, health details, '
-            "money amounts or card and bank account numbers, and catches only some phone "
-            "numbers. Review them before uploading."
+            "money amounts or card and bank account numbers, and catches only some "
+            "addresses and phone numbers. Review them before uploading."
         )
     if not args.yes and not _confirm():
         raise CliError("aborted; nothing uploaded")

@@ -19,12 +19,14 @@ FIXTURE = Path(__file__).parent / "fixtures" / "redact" / "chat_pii_session.json
 # kind (also the fixture message id) -> the fictional value placed in that message
 VALUES = {
     "email": "jane.doe@vexlor-mail.invalid",
-    "ssn": "987-65-4320",
+    "ssn_dashed": "987-65-4320",
+    "ssn_undashed": "987654320",
     "iban": "GB82WEST12345698765432",
     "card_number": "4111 1111 1111 1111",
     "phone_call_me_at_10_digit": "(555) 555-0142",
     "phone_my_phone_is_7_digit": "555-0143",
-    "street_address": "42 Maple Lane",
+    "address_after_i_live_at": "42 Maple Lane",
+    "address_send_it_to": "42 Maple Lane",
     "person_name": "Jane Doe",
     "health_detail": "type 2 diabetes",
     "money_amount": "$4,200",
@@ -32,9 +34,11 @@ VALUES = {
 
 EXPECTED_COVERAGE = {
     "email": True,
-    "ssn": True,
+    "ssn_dashed": True,
     "phone_call_me_at_10_digit": True,
-    "street_address": True,
+    "address_after_i_live_at": True,
+    "ssn_undashed": False,
+    "address_send_it_to": False,
     "iban": False,
     "card_number": False,
     "phone_my_phone_is_7_digit": False,

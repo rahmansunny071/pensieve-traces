@@ -15,7 +15,7 @@
       "text": "Write to jane.doe@vexlor-mail.invalid about the rent."
     },
     {
-      "id": "ssn",
+      "id": "ssn_dashed",
       "role": "user",
       "text": "My SSN is 987-65-4320."
     },
@@ -40,7 +40,7 @@
       "text": "My phone is 555-0143."
     },
     {
-      "id": "street_address",
+      "id": "address_after_i_live_at",
       "role": "user",
       "text": "I live at 42 Maple Lane, Springfield."
     },
@@ -58,6 +58,16 @@
       "id": "money_amount",
       "role": "user",
       "text": "I still owe $4,200 on the loan."
+    },
+    {
+      "id": "address_send_it_to",
+      "role": "user",
+      "text": "Send it to 42 Maple Lane, Springfield."
+    },
+    {
+      "id": "ssn_undashed",
+      "role": "user",
+      "text": "My SSN is 987654320."
     }
   ]
 }
