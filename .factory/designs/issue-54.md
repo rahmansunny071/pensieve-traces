@@ -42,3 +42,8 @@ None.
 
 ## Size estimate
 M
+
+## Implementation notes
+- Built in `builders/convomem/items.py` (`build_items`, `EvidenceItem`, `EvidenceMessage`, `Stats`, `CATEGORIES`, `item_prompt_hashes`), `_common.py` (parsing and cache, moved from `extract.py` unchanged) and `_text.py` (convomem-arena `text.py` ported unchanged for the filler check). 17 prompt files.
+- Deviations: grouping prompts are `group_<category>.txt` (5 files) instead of one `items_group.txt`; there is no `dropped_model_error` counter (a failed call is `failed_calls`, a verification that cannot finish is `dropped_verification`); the verbatim check runs before the wording call so no call is paid for a bad group; `build_items` also takes `stats=`. The ConvoMem abstention generator fixes the answer text; our abstention prompt asks for that sentence and the code accepts whatever the model writes, as decided.
+- Needs a human: convomem-arena has no license file (NOTICE credits it as same-author work).

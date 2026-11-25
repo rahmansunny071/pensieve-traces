@@ -1,0 +1,49 @@
+Copyright (c) 2024 Salesforce, Inc.
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+except in compliance with the License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0 (full text: LICENSE-Apache-2.0.txt, next to this file).
+Unless required by applicable law or agreed to in writing, software distributed under the
+License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND.
+Adapted from Salesforce ConvoMem:
+https://github.com/SalesforceAIResearch/ConvoMem/blob/main/src/main/scala/com/salesforce/crmmembench/questions/evidence/generation/AnsweringEvaluation.scala
+Modified by pensieve-traces: the prompt text is unchanged except that Scala string interpolation ($question, $correctAnswer, $modelAnswer, evidence messages) is written as {question}, {answer}, {response}, {evidence}, and the shared guidelines block is inlined.
+=====PROMPT=====
+You are evaluating whether a model's response correctly answers a question using information from an evidence message.
+
+**Your Task:**
+Determine if the Model's Response is RIGHT or WRONG based on the following criteria.
+
+**Question Asked:** 
+{question}
+
+**Evidence Message Available to the Model:**
+{evidence}
+
+**Correct Answer (what the response should convey):**
+{answer}
+
+**Model's Response to Evaluate:**
+{response}
+
+**Evaluation Criteria:**
+
+When the response is RIGHT:
+- The core answer matches the Correct Answer (exact phrasing not required)
+- The response demonstrates understanding of the information from the evidence message
+- The response correctly addresses the question asked
+- If the model includes accurate additional details not in the Correct Answer, that's still RIGHT
+
+When the response is WRONG:
+- The core answer contradicts or significantly differs from the Correct Answer
+- Critical information from the evidence message is missing or misunderstood
+- The response shows confusion about the facts
+- The response fails to answer the question asked
+
+**Important Notes:**
+- The model doesn't need to quote the evidence message verbatim
+- Paraphrasing or summarization is expected and acceptable
+- Focus on whether the essential information has been correctly conveyed
+
+**Answer only "RIGHT" or "WRONG". Do not provide any additional text, explanations, or reasoning.**
+
+Answer (RIGHT/WRONG):

@@ -29,14 +29,19 @@ import hashlib
 import json
 import logging
 import os
-import re
-import tempfile
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from importlib import resources
-from pathlib import Path
 from typing import Any, Literal
 
+from pensieve_traces.builders.convomem._common import (
+    CACHE_FORMAT_VERSION,
+    cache_path,
+    cache_read,
+    cache_write,
+    open_cache_dir,
+    parse_reply,
+)
 from pensieve_traces.builders.llm import ChatClient, ModelClientError
 from pensieve_traces.model import Session
 from pensieve_traces.writers.convomem import sessions_to_conversations_with_ids
@@ -55,16 +60,12 @@ __all__ = [
 
 log = logging.getLogger(__name__)
 
-CACHE_FORMAT_VERSION = 1
 Kind = Literal["user_fact", "assistant_fact", "preference", "changing_value"]
 KINDS: tuple[str, ...] = ("user_fact", "assistant_fact", "preference", "changing_value")
 # Each prompt file is an attribution header, this line, then the prompt body.
 PROMPT_DELIMITER = "=====PROMPT====="
 PROMPT_FILES = ("extract_system.txt", "extract_user.txt")
 _PROMPTS = resources.files("pensieve_traces.builders.convomem") / "prompts"
-_CACHE_NAME = re.compile(r"^[0-9a-f]{64}\.json$")
-_THINK = re.compile(r"\A\s*<think>.*?</think>", re.DOTALL)
-_FENCE = re.compile(r"\A\s*```[A-Za-z0-9_-]*\s*\n(.*?)\n?\s*```\s*\Z", re.DOTALL)
 
 
 @dataclass
@@ -145,64 +146,12 @@ def prompt_hashes() -> dict[str, str]:
     return {n: hashlib.sha256((_PROMPTS / n).read_bytes()).hexdigest() for n in PROMPT_FILES}
 
 
-def _parse_reply(reply: str) -> list[Any]:
-    """Tolerant parse: drop a leading <think> block and one code fence, accept a list or a
-    one-list-value object. Raises ``ValueError``/``TypeError`` for anything else."""
-    text = _THINK.sub("", reply, count=1).strip()
-    fence = _FENCE.match(text)
-    if fence:
-        text = fence.group(1).strip()
-    data = json.loads(text)
-    if isinstance(data, dict):
-        if len(data) != 1 or not isinstance(next(iter(data.values())), list):
-            raise TypeError("reply object is not a single list")
-        data = next(iter(data.values()))
-    if not isinstance(data, list):
-        raise TypeError("reply is not a list")
-    return data
-
-
 def _render(window: list[dict[str, str]]) -> list[dict[str, str]]:
     body = "\n".join(f"[{i}] {m['speaker']}: {m['text']}" for i, m in enumerate(window))
     return [
         {"role": "system", "content": load_prompt("extract_system.txt")},
         {"role": "user", "content": load_prompt("extract_user.txt").replace("{messages}", body)},
     ]
-
-
-def _cache_path(cache_dir: Path, messages: list[dict[str, str]], model: str) -> Path:
-    blob = json.dumps(
-        {"v": CACHE_FORMAT_VERSION, "model": model, "messages": messages}, sort_keys=True
-    )
-    return cache_dir / f"{hashlib.sha256(blob.encode()).hexdigest()}.json"
-
-
-def _cache_read(path: Path) -> list[Any] | None:
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    if isinstance(data, dict) and data.get("version") == CACHE_FORMAT_VERSION:
-        reply = data.get("reply")
-        if isinstance(reply, list):
-            return reply
-    return None
-
-
-def _cache_write(path: Path, reply: list[Any]) -> None:
-    assert _CACHE_NAME.match(path.name)
-    payload = json.dumps({"version": CACHE_FORMAT_VERSION, "reply": reply})
-    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".tmp-", suffix=".part")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(payload)
-        os.replace(tmp, path)
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
 
 
 def _validate(
@@ -265,12 +214,7 @@ def extract_candidates(
     if window < 1 or not 0 <= overlap < window:
         raise ValueError("need window >= 1 and 0 <= overlap < window")
     stats = stats if stats is not None else ExtractStats()
-    cache: Path | None = None
-    if cache_dir is not None:
-        cache = Path(cache_dir)
-        if cache.exists() and not cache.is_dir():
-            raise NotADirectoryError(f"cache path is not a directory: {cache}")
-        cache.mkdir(parents=True, exist_ok=True)
+    cache = open_cache_dir(cache_dir)
 
     conversations, id_map = sessions_to_conversations_with_ids(sessions)
     by_session = {s.id: s for s in sessions}
@@ -286,8 +230,8 @@ def extract_candidates(
             chunk = msgs[start : start + window]
             stats.windows += 1
             request = _render(chunk)
-            path = _cache_path(cache, request, client.model) if cache else None
-            reply = _cache_read(path) if path else None
+            path = cache_path(cache, request, client.model) if cache else None
+            reply = cache_read(path) if path else None
             if reply is not None:
                 stats.cache_hits += 1
             else:
@@ -298,12 +242,12 @@ def extract_candidates(
                     stats.failed_windows += 1
                     continue
                 try:
-                    reply = _parse_reply(raw)
+                    reply = parse_reply(raw)
                 except (ValueError, TypeError):
                     stats.dropped_bad_json += 1
                     continue
                 if path:
-                    _cache_write(path, reply)
+                    cache_write(path, reply)
             for item in reply:
                 ok = _validate(item, len(chunk), stats)
                 if ok is None:

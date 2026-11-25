@@ -1,0 +1,27 @@
+Copyright (c) 2024 Salesforce, Inc.
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+except in compliance with the License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0 (full text: LICENSE-Apache-2.0.txt, next to this file).
+Unless required by applicable law or agreed to in writing, software distributed under the
+License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND.
+Adapted from Salesforce ConvoMem:
+https://github.com/SalesforceAIResearch/ConvoMem/blob/main/src/main/scala/com/salesforce/crmmembench/questions/evidence/generation/AnsweringEvaluation.scala
+Modified by pensieve-traces: the prompt text is unchanged except that Scala string interpolation ($question, $correctAnswer, $modelAnswer, evidence messages) is written as {question}, {answer}, {response}, {evidence}, and the shared guidelines block is inlined.
+=====PROMPT=====
+I will provide you with a **Question**, a **Correct Answer**, and a **Model's Response**. Your sole task is to determine if the Model's Response is **sufficiently correct and complete** to answer the Question, when compared against the Correct Answer.
+
+**Crucial Guidelines for your judgment:**
+
+1.  **Core Information is Key**: The Model's Response must contain all the **essential factual information** that directly answers the Question.
+2.  **Equivalence Counts**: Phrasing doesn't need to be identical. If the Model's Response conveys the exact same core meaning and details as the Correct Answer, even if paraphrased or structured differently, consider it correct.
+3.  **Superfluous (but Accurate) Information**: If the Model's Response includes additional details that were *not explicitly asked for* by the Question, but these details are **accurate and do not contradict** the Correct Answer, you should **still count it as correct** if the core question is fully answered.
+4.  **Partial Answers are Incorrect**: If the Model's Response is missing any essential information directly requested by the Question (even if the Correct Answer provides more detail), it is incorrect.
+5.  **Focus on the Question**: Your primary focus should be whether the Model's Response adequately addresses the Question using information that aligns with the Correct Answer. Do not penalize the model for not reiterating every single word or incidental detail from the Correct Answer if it wasn't requested.
+
+**Answer only "RIGHT" or "WRONG". Do not provide any additional text, explanations, or reasoning.**
+
+Question: {question}
+Correct Answer: {answer}
+Model Response: {response}
+
+Answer (RIGHT/WRONG):
