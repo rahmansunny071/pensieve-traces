@@ -7,7 +7,7 @@ The README (241 lines) holds all documentation. Readers need a navigable site, i
 **Needs the maintainer's explicit approval (each exactly):**
 - (a) NEW `.github/workflows/docs.yml`: triggers `push` to `main` with paths `docs/**`, `mkdocs.yml`, `overrides/**`, `CHANGELOG.md`, `.github/workflows/docs.yml`, plus `workflow_dispatch`; `permissions: contents: write`; concurrency group `docs`; steps: checkout (`fetch-depth: 0`), setup-python 3.12, `pip install "mkdocs-material>=9.5"`, git bot identity, `mkdocs gh-deploy --strict --force`. No secrets, no other service.
 - (b) NEW extra in `pyproject.toml`: `docs = ["mkdocs-material>=9.5"]`. Base install unchanged; `uv.lock` updated only by `uv lock`.
-- (c) Repo setting: GitHub Pages served from the `gh-pages` branch (maintainer sets it).
+- (c) Repo setting: GitHub Pages served from the `gh-pages` branch (the orchestrator enables it after the first deploy).
 
 **Nav** (README section it comes from):
 - Overview `index.md`: intro, outputs table, diagram, Privacy note.
@@ -47,9 +47,7 @@ No Python tests. Run `mkdocs build --strict` (no warnings); the four CI checks; 
 - Site is public: it republishes README text already public.
 
 ## Open questions
-1. Should `ci.yml` run `mkdocs build --strict` on PRs? Recommend yes, as a separate follow-up PR (broken links would otherwise only fail after merge, in the deploy). Not planned here, since it edits `ci.yml`.
-2. Can't verify here: mkdocs-material version resolution under the lock, and that the Pages setting is available. `uv lock` will show the first when built.
-3. Keep the "How this repo is built" stub too (recommended), or file an agent-factory lesson for SKILL.md line 16?
+Answered by the maintainer (recorded on PR #82): (a), (b) and (c) approved exactly as named above. `ci.yml` is NOT changed here; a strict build in CI becomes a separate issue. Both README stubs are kept ("How this repo is built" and "Letting the factory merge for you"), each linking to its site page. Still unverified until the build: mkdocs-material resolution under the lock.
 
 ## Size estimate
 M
