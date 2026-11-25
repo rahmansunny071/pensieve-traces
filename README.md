@@ -38,6 +38,25 @@ copy = redact_session(session)  # scrubbed deep copy, input untouched
 
 Writers must obtain their session through `prepare_for_output`. It never falls back to unredacted output: without the extra it raises `RedactionUnavailableError`. Ids, tool names, timestamps and usage are left as is. Redaction is pattern-based and best-effort, so review output before sharing.
 
+**What redaction covers on chat content.** teich was tuned on coding sessions. Measured with teich 0.3.8 (the version `uv.lock` pins) on a synthetic claude.ai-style chat (`tests/fixtures/redact/chat_pii_session.json`), pinned by `tests/test_redact_chat_coverage.py` so a teich upgrade that changes coverage shows up as a test change:
+
+| Kind | Replaced |
+|---|---|
+| email address | yes |
+| dashed SSN-style number (`987-65-4320`) | yes |
+| street address after "I live at" | yes |
+| 10-digit phone after a phrase like "Call me at" | yes |
+| undashed SSN-style number (`My SSN is 987654320.`) | no |
+| street address after other phrasing ("Send it to 42 Maple Lane, Springfield.") | no |
+| 7-digit phone after other phrasing ("My phone is 555-0143") | no |
+| IBAN | no |
+| card number | no |
+| person name | no |
+| health detail | no |
+| money amount | no |
+
+Phone and address matching depends on the surrounding phrasing (teich 0.3.8 replaces an address only after phrases like "I live at" or "address:"; "My address is …", "Send it to …" and "Deliver to …" are left as is). Redaction does not catch chat personal data in general: review claude.ai traces before sharing them.
+
 ## Canonical model
 
 `pensieve_traces.model` defines the harness-neutral dataclasses `Session`, `Message`, `ToolCall`, `Usage` and the `Role` enum (no extra dependencies). Timestamps are timezone-aware, tool arguments stay a raw JSON string, and `Session.to_json()` / `Session.from_json()` round-trip losslessly. The model holds raw text and does no redaction.
@@ -127,6 +146,7 @@ pensieve-traces upload traces/ --repo <user>/<dataset>   # private unless --publ
 
 - `convert` writes the STS header key `pensieveRedacted` (`true` when redaction ran, `false` with `--no-redact`). `upload` refuses any file whose first line lacks `"pensieveRedacted": true` (a missing marker counts as unredacted) unless you pass `--allow-unredacted`. The marker is an attestation, not proof; review traces before sharing.
 - Only the top-level `*.jsonl` files of the directory are uploaded, at the repo root.
+- If any file has `"harness": "claude.ai"` in its header, `upload` prints a warning with their count before the confirmation prompt (also with `--yes`) saying redaction does not catch names, health details, money amounts or card and bank account numbers and catches only some addresses and phone numbers. It never refuses on this basis; see "Redaction" for the measured coverage.
 - A summary (file count, total size, repo, visibility) is shown and you are asked to confirm; `--yes` skips the prompt.
 - `--public` must be explicit and prints a warning. If the repo already exists and is public, the upload is refused unless `--public` is given. Without the `hub` extra the command prints an install hint and exits 1.
 
