@@ -13,8 +13,10 @@ import pytest
 
 from pensieve_traces import cli
 from pensieve_traces.builders.convomem import dataset
+from pensieve_traces.readers.claude_ai import HARNESS as CLAUDE_AI
+from pensieve_traces.readers.claude_code import HARNESS as CLAUDE_CODE
 
-EMAIL = "Jordan.Doe@Acme-Mail.net"
+EMAIL = "jordan.doe@example.invalid"
 FACTS = {
     "cc-1": ["I adopted a beagle named Biscuit in March.", "Congratulations on the new dog."],
     "cc-2": ["Please format this table of invoices.", "Here is the table."],
@@ -204,16 +206,12 @@ def test_full_run_layout_and_manifest(tmp_path, fake_teich, client, capsys) -> N
         "item_stats",
         "topics",
     }
-    assert (
-        manifest["inputs"]
-        == {
-            "count": 2,
-            "sessions_read": 4,
-            "duplicates_dropped": 0,
-            "sessions_by_harness": {"claude_code": 2, "claude_ai": 2},
-        }
-        or manifest["inputs"]["count"] == 2
-    )
+    assert manifest["inputs"] == {
+        "count": 2,
+        "sessions_read": 4,
+        "duplicates_dropped": 0,
+        "sessions_by_harness": {CLAUDE_CODE: 2, CLAUDE_AI: 2},
+    }
     assert manifest["model"] == "m1" and manifest["redaction"] is True
     assert manifest["endpoint_local"] is True
     assert manifest["conversations"] == {"total": 4, "evidence": 2, "filler": 2}
