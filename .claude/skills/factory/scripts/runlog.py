@@ -13,8 +13,9 @@ Logs live in `.factory/runs/<YYYY-MM-DD>.jsonl` at the repo root (gitignored). S
     python .claude/skills/factory/scripts/runlog.py --self-test
 
 Steps used by the factory skill: plan, plan-check, design-review, build, review, fix, handoff-written,
-needs-maintainer, resume, merge, blocked, decision, improvement-filed. An issue whose last step is
-`merge` is done; `needs-maintainer` is waiting on the maintainer; anything else is in flight.
+needs-maintainer, resume, merge, ready-to-merge, blocked, decision, improvement-filed. An issue whose
+last step is `merge` is done; `needs-maintainer` and `ready-to-merge` are waiting on the maintainer;
+anything else is in flight.
 
     python .claude/skills/factory/scripts/runlog.py add --issue 4 --step needs-maintainer \
         --actor reviewer --model opus --pr 29 --commit a1b2c3d --thread 7126001 --thread 7126002
@@ -32,7 +33,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 DONE_STEPS = {"merge"}
-WAITING_STEPS = {"needs-maintainer"}
+WAITING_STEPS = {"needs-maintainer", "ready-to-merge"}
 # UTC that works on Python 3.10 and doesn't trip ruff's UP017 on 3.11+.
 _UTC = timezone(timedelta(0))
 
@@ -134,8 +135,11 @@ def _self_test() -> None:
         add(d, {"issue": 4, "step": "merge"})
         add(d, {"issue": 5, "step": "build", "model": "sonnet", "tokens": 30000})
         add(d, {"issue": 6, "step": "needs-maintainer", "pr": 9, "refs": {"threads": [1, 2]}})
+        add(d, {"issue": 7, "step": "ready-to-merge", "pr": 70})
         entries = read_all(d)
         last = status(entries)
+        assert last[7]["step"] in WAITING_STEPS and last[7]["step"] not in DONE_STEPS, last[7]
+        assert last[5]["step"] not in WAITING_STEPS, last[5]
         assert last[4]["step"] == "merge" and last[5]["step"] == "build", last
         assert last[6]["refs"]["threads"] == [1, 2], last[6]
         per = summary(entries)

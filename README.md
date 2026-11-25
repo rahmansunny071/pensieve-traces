@@ -126,8 +126,18 @@ Work happens through an issue-driven factory on Claude Code GitHub Actions. Agen
 | `factory:building` | agent | Implementation in progress |
 | `factory:review` | agent | Implementation PR open, awaiting merge |
 | `factory:blocked` | agent | Agent hit something it shouldn't decide |
+| `factory:ready-to-merge` | factory skill | Every gate passed but the merge was refused: you merge it |
 
 Agent rules live in [`CLAUDE.md`](CLAUDE.md); the stage prompts in [`.claude/commands/`](.claude/commands/).
+
+The **`factory` skill** (`.claude/skills/factory/`) runs the same pipeline from a Claude Code session. Two of its rules:
+
+- **Docs ship with the code:** every PR updates the docs its change affects, and its Handoff says which (or why none). Older mismatches become sub-issues of the "Documentation tech-debt" issue (#43).
+- **Ready to merge:** if every gate passes but the merge is refused (the harness denies it or GitHub rejects it), the skill never works around it. It labels the PR `factory:ready-to-merge`, comments the exact merge command and carries on; `queue.py` and the end-of-run report list what waits for you. To let it merge by itself instead, add this [permission rule](https://code.claude.com/docs/en/permissions) to `.claude/settings.json` or `~/.claude/settings.json` yourself. It lets the agent use your ruleset bypass (`--admin`), so the repo doesn't ship it:
+
+  ```json
+  { "permissions": { "allow": ["Bash(gh pr merge * --merge --admin --delete-branch)"] } }
+  ```
 
 ## Development
 

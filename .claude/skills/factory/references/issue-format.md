@@ -51,7 +51,8 @@ usage example (a command or code snippet) when there is one.
 
 - [ ] Checkable statements: names of functions/classes/CLI flags, behaviors, error handling.
 - [ ] What the tests prove, using offline fixtures only.
-- [ ] Docs updated (README section, CHANGELOG).
+- [ ] Docs updated, named exactly: e.g. `README.md` "Usage" section, `CHANGELOG.md`, the docstring of
+      `pkg.writer.write_sts`. Every doc the change makes wrong or stale counts, not just new ones.
 
 ### Out of scope
 
@@ -64,6 +65,21 @@ One or more of the options in the issue template's "Areas affected" dropdown.
 
 Issues that are polish or hardening rather than the main path get the `improvement` label. A
 main-path issue never depends on an `improvement` issue.
+
+## Documentation todo (a sub-issue of "Documentation tech-debt")
+
+A doc that's wrong or stale and isn't fixed by the PR at hand (a reviewer's `doc-debt` finding, or one
+noticed while planning). File it with `scripts/lanes.py doc-debt add --title … --body-file …`, which
+labels it `documentation`, `improvement`, `P2` and links it under the open issue titled exactly
+"Documentation tech-debt" (created if missing). The body says:
+
+```markdown
+`<path>` (<section>) says <what it says>, but <what the code does, with a file:line or command>.
+
+**Fix:** <the exact change>.
+
+Found in <review thread / PR / planning link>. Can ride along with the next PR that touches `<path>`.
+```
 
 ## Quality bar
 
@@ -78,6 +94,8 @@ could write a design without asking anything. In practice:
   serialize work for nothing.
 - **Scope is one PR.** If the criteria list runs past roughly 8 items, or spans several subsystems, split
   it.
+- **Docs are named.** The "Docs updated" criterion lists the specific files and sections, so the
+  reviewer can check them.
 - **Hard rules are reflected.** If `CLAUDE.md` says redaction is on by default or data is never
   committed, the issue's criteria say how that applies here.
 - **Nothing is invented.** Where the brainstorm left something open, the issue says it's open and makes

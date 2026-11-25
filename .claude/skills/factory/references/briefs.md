@@ -27,6 +27,8 @@ what a replacement agent, the reviewer or the maintainer reads first, so it must
 - **Changed:** `path/a.py` (what and why), `tests/test_a.py` (what it proves), …
 - **Key decisions:** choices made and why, especially anything a reader might second-guess
 - **How to test:** the exact commands (from CLAUDE.md) and any focused test to run
+- **Docs:** the docs updated (`README.md` "Usage", `CHANGELOG.md`, docstrings in `pkg/a.py`, …), or
+  "none needed: <why>" (e.g. "internal refactor, no behaviour or interface change")
 - **Open:** anything unfinished, assumed or waiting on the maintainer, with thread links
 ```
 
@@ -51,12 +53,16 @@ Read: `gh issue view <N> -R <owner/repo> --comments`, CLAUDE.md, and these start
 <the modules the issue touches, plus already-merged code it must reuse>.
 Context from the orchestrator: <constraints, e.g. what CI installs, dependencies to name exactly, release
 phase, decisions already made>.
+Open doc-debt todos (sub-issues of "Documentation tech-debt"): <`lanes.py doc-debt list` output, or "none">.
+If this PR already touches the file a todo is about, fix that todo too and add "Closes #<todo>" to the PR
+body. Don't open other files just for doc-debt.
 
 PHASE 1 — PLAN ONLY. Write .factory/designs/issue-<N>.md using the section template in
 <worktree-abs-path>/.claude/commands/design-issue.md (Problem, Proposed approach, Alternatives rejected,
 Files & interfaces touched, Test plan, Risks, Open questions, Size estimate). Keep it short: ~250 words
-for size S, ~500 for M. Name functions, classes, CLI flags and every dependency change exactly. Don't add
-scope; put anything you can't verify from the code, the issue or a cited spec under Open questions.
+for size S, ~500 for M. Name functions, classes, CLI flags and every dependency change exactly. List the
+docs the change will update under "Files & interfaces touched", plus any doc-debt todos riding along.
+Don't add scope; put anything you can't verify from the code, the issue or a cited spec under Open questions.
 Commit ("plan: <title> (#<N>)"), `git push -u origin local/issue-<N>`, and open a DRAFT PR titled
 "feat: <title> (#<N>)" whose body starts with "Closes #<N>" and has a "## Handoff" section (see the
 Handoff format: for now, "Plan only; nothing built yet"). Then STOP and return. Don't write code yet.
@@ -77,9 +83,13 @@ open_questions: <or "none">
 Plan approved<, with these changes: …>. Reviewer notes (guidance, not plan changes): <… or "none">.
 Now build it: follow <worktree-abs-path>/.claude/commands/build-from-design.md from step 2 (you're already
 on local/issue-<N>; use it wherever that command names its own branch; the plan file is the contract; the
-PR already exists, so update it instead of opening a new one). Run every check in CLAUDE.md's "Definition
-of checks pass" until green. Rewrite the PR body: Closes #<N>, "## Handoff" (the format in briefs.md),
-"## Checks run" (commands and counts), "## Deviations" (or "None"). Then `gh pr ready <PR>` and set the
+PR already exists, so update it instead of opening a new one). Docs ship with the code (CLAUDE.md hard
+rule): write docs for new behaviour, and update every README, CHANGELOG, docstring or .factory/designs/
+passage this change makes wrong or stale. Documentation problems you notice outside this PR's diff aren't
+yours to fix: list them under the Handoff's "Open" line. Run every check in CLAUDE.md's "Definition of
+checks pass" until green. Rewrite the PR body: Closes #<N> (plus "Closes #<todo>" for each ride-along),
+"## Handoff" (the format in briefs.md, including its "Docs" line), "## Checks run" (commands and
+counts), "## Deviations" (or "None"). Then `gh pr ready <PR>` and set the
 issue label factory:review (remove factory:building). If a command is denied or checks can't go green,
 comment on the PR, add factory:blocked and stop.
 
@@ -89,6 +99,7 @@ phase: build
 status: done | blocked
 pr: <URL>
 checks: <each CLAUDE.md check → pass/fail with counts>
+docs: <docs updated, or "none needed: <why>">
 deviations: <or "none">
 ```
 
@@ -98,9 +109,10 @@ deviations: <or "none">
 Review blockers to fix on <PR>, nothing else:
 <numbered list: each with its review comment id and reproduction>
 For each: fix it, and add a test that fails without the fix (check by reverting locally; don't commit the
-revert). Stay within the plan; if a fix needs a material plan change, stop and report blocked. Re-run
-every CLAUDE.md check until green, commit ("fix: review blockers (#<N>)"), push, rewrite the PR body's
-Handoff and "Checks run", and reply on each blocker's thread with what changed:
+revert; a docs-only blocker needs no test). If a fix changes behaviour, update the docs that describe it.
+Stay within the plan; if a fix needs a material plan change, stop and report blocked. Re-run every
+CLAUDE.md check until green, commit ("fix: review blockers (#<N>)"), push, rewrite the PR body's Handoff
+(including "Docs") and "Checks run", and reply on each blocker's thread with what changed:
 `gh api -X POST repos/<owner/repo>/pulls/<PR>/comments/<comment-id>/replies -f body="Fixed in <sha>: …"`.
 Don't resolve threads; the orchestrator does that after verifying.
 
@@ -125,8 +137,9 @@ answers on these threads: <thread/comment ids with one-line summaries>, the diff
 
 Apply the maintainer's answers, exactly as given:
 <numbered: thread → the decision to implement>
-Add or adjust tests for each. Re-run every CLAUDE.md check until green. Commit ("fix: maintainer answers
-(#<N>)"), push, rewrite the Handoff and "Checks run", and reply on each thread with what changed. Don't
+Add or adjust tests for each, and update the docs each change affects (CLAUDE.md hard rule: docs ship
+with the code). Re-run every CLAUDE.md check until green. Commit ("fix: maintainer answers (#<N>)"), push,
+rewrite the Handoff (including "Docs") and "Checks run", and reply on each thread with what changed. Don't
 resolve threads. If an answer is ambiguous or would need a material plan change, don't guess: reply on
 the thread with the specific question and report blocked.
 
@@ -188,9 +201,17 @@ Release phase: <mvp | hardening>. Tag EVERY finding:
   that claims to prove something it doesn't. Give an exact reproduction.
 - [improvement]: everything else that would be better: crafted or adversarial inputs, robustness, polish,
   refactors, test gaps off the main path. In the mvp phase these never block the merge.
+- [doc-debt]: a doc that disagrees with the code but was already wrong before this PR (check with
+  `git show origin/main:<path>`). Never fixed in this PR; the orchestrator files it under the
+  "Documentation tech-debt" issue. Say which doc, what's wrong and the fix.
 - [question]: a decision only the maintainer can make (product behavior, naming they'd care about,
   trade-offs with no clear winner). State the options and your recommendation.
 Don't reopen decisions recorded on the issue or PR.
+
+Docs vs code (CLAUDE.md hard rule): in the area the diff changes, check that README, CHANGELOG,
+docstrings, `docs/` and .factory/designs/ agree with the code, and that the Handoff's "Docs" line is
+true (a "none needed" reason must hold up against the diff). A mismatch this PR causes (a doc it should
+have updated, or one it changed wrongly) is a [blocker], even in mvp. One that predates it is [doc-debt].
 
 Post ONE review on the PR with inline comments anchored to the lines they're about (references/gates.md
 → "Posting questions" shows the API call), each starting with its tag. Put a short summary in the review
@@ -203,6 +224,7 @@ confidence: high | medium | low
 review_id: <id>
 blockers: <numbered: comment id + reproduction, else "none">
 improvements: <numbered: comment id + one line, else "none">
+doc_debt: <numbered: comment id + doc + one line, else "none">
 questions: <numbered: comment id + options and recommendation, else "none">
 undisclosed_deviations: <list, else "none">
 ```
