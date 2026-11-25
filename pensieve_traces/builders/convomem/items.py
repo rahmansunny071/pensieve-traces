@@ -22,9 +22,11 @@ How an item is made (grouping by code, wording by the model):
   evidence: the evidence messages are the candidates' verbatim messages. Preferences and implicit
   connections answers are rubrics; abstention answers are model-written.
 
-Checks, each failure drops the item and bumps one :class:`Stats` counter: evidence equals a full
+Checks, each failure drops the item and bumps one :class:`Stats` counter: every evidence message
+comes from a different conversation (``evidence_count == len(conversation_ids)``, as ConvoMem's
+validator and convomem-arena require; checked before any wording call); evidence equals a full
 message of its conversation; chronology of changing facts; the answer of a changing fact contains
-its last value; no question duplicates an earlier kept one; no other conversation gives the answer
+its last value (numbers compared as numbers, so "$1,500" holds 1500); no question duplicates an earlier kept one; no other conversation gives the answer
 away (convomem-arena's ``check_filler``, see ``_text.py``); and, with ``verify=True``, a model
 answers the question from the evidence conversations only and a judge prompt (copied from
 ConvoMem's ``AnsweringEvaluation.scala``) must say RIGHT. Abstention passes when the model
@@ -150,6 +152,7 @@ class Stats:
     dropped_bad_json: int = 0  # a JSON reply that could not be parsed
     dropped_bad_group: int = 0  # bad indices, wrong size, or evidence count out of range
     dropped_missing_fields: int = 0  # wording reply without a usable question and answer
+    dropped_shared_conversation: int = 0  # two evidence messages in one conversation
     dropped_evidence_not_verbatim: int = 0
     dropped_chronology: int = 0
     dropped_answer_mismatch: int = 0
@@ -329,6 +332,19 @@ def _changing_groups(run: _Run, candidates: list[Candidate]) -> list[list[Candid
     return out
 
 
+_NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
+
+
+def _has_value(answer: str, value: str) -> bool:
+    """Does ``answer`` contain ``value``? Numbers compare as numbers ("$1,500" holds 1500); the
+    rest of the value, and values without numbers, compare as normalized word sequences."""
+    nums = numbers(value)
+    if not nums:
+        return f" {norm(value)} " in f" {norm(answer)} "
+    rest = words(_NUMBER.sub(" ", value))
+    return nums <= numbers(answer) and set(rest) <= set(words(answer))
+
+
 def _wording(run: _Run, category: str, group: list[Candidate]) -> tuple[str, str] | None:
     prompt = _fill(_load(f"items_{category}.txt"), facts=_facts_text(group))
     reply = run.ask(prompt, json_reply=True)
@@ -446,6 +462,9 @@ def build_items(
             if len(evidence) not in counts:
                 stats.dropped_bad_group += 1
                 continue
+            if len({e.conversation_id for e in evidence}) != len(evidence):
+                stats.dropped_shared_conversation += 1  # ConvoMem: one conversation per evidence
+                continue
             if not all(run.verbatim(e) for e in evidence):
                 stats.dropped_evidence_not_verbatim += 1
                 continue
@@ -453,10 +472,7 @@ def build_items(
             if worded is None:
                 continue
             question, answer = worded
-            if (
-                category == "changing_facts"
-                and f" {norm(group[-1].value or '')} " not in f" {norm(answer)} "
-            ):
+            if category == "changing_facts" and not _has_value(answer, group[-1].value or ""):
                 stats.dropped_answer_mismatch += 1
                 continue
             key = norm(question)

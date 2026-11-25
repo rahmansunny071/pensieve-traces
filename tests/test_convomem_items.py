@@ -475,13 +475,14 @@ def test_evidence_count_outside_the_category_range_is_dropped() -> None:
 
 def test_groups_never_span_group_chunk() -> None:
     a, b, f = world()
+    c = make("c", ["My shoe size is 44."], day=4)
     cands = [
         cand(a, "user_fact", [0], "one"),
-        cand(a, "user_fact", [2], "two"),
-        cand(a, "user_fact", [4], "three"),
+        cand(b, "user_fact", [0], "two"),
+        cand(c, "user_fact", [0], "three"),
     ]
     client = all_categories_router(groups=[{"indices": [0, 1]}])
-    items, _ = run(cands, [a, b, f], client, group_chunk=2, verify=False)
+    items, _ = run(cands, [a, b, c, f], client, group_chunk=2, verify=False)
     user_calls = client.with_needle(GROUPS["user_facts"])
     assert len(user_calls) == 2
     assert "two" in user_calls[0] and "three" not in user_calls[0] and "[1]" not in user_calls[1]
@@ -668,3 +669,38 @@ def test_filler_needs_at_least_two_terms_for_facts_and_three_for_abstention() ->
     two_words = all_categories_router(**{TASKS["abstention"]: qa("Hotel Lisbon?", IDK)})
     items, st = run([cand(a, "user_fact", [1])], [a, f], two_words, verify=False)
     assert "abstention" in {i.category for i in items} and st.dropped_topic_in_filler == 0
+
+
+def test_check_evidence_from_one_conversation_is_dropped_before_wording() -> None:
+    a = make("a", ["My dog is called Biscuit.", "Nice.", "Biscuit is three years old.", "Cute."])
+    f = make("f", ["Let us talk about gardening tools."], day=2)
+    two_candidates = [cand(a, "user_fact", [0]), cand(a, "user_fact", [2])]
+    one_candidate = [cand(a, "user_fact", [0, 2])]
+    for cands in (two_candidates, one_candidate):
+        client = all_categories_router(
+            groups=[{"indices": [0, 1]}] if len(cands) == 2 else [{"indices": [0]}]
+        )
+        items, st = run(cands, [a, f], client, verify=False)
+        assert of(items, "user_facts") == [] and st.dropped_shared_conversation >= 1
+        assert not client.with_needle(TASKS["user_facts"])  # no wording call was paid for
+    for item in items:  # whatever else is kept never has two evidence messages in one conversation
+        assert item.evidence_count == len(item.conversation_ids)
+
+
+def test_changing_answer_with_formatted_number_matches_the_value() -> None:
+    a, b, f = world()
+    cands = [
+        cand(a, "changing_value", [4], subject="rent", value="1000"),
+        cand(b, "changing_value", [0], subject="rent", value="1500"),
+    ]
+    for answer, kept in (
+        ("It is $1,500 a month.", 1),
+        ("It is $1,000 a month.", 0),
+        ("About 15000.", 0),
+    ):
+        client = all_categories_router(
+            **{TASKS["changing_facts"]: qa("How much is my rent?", answer)}
+        )
+        items, st = run(cands, [a, b, f], client, verify=False)
+        assert len(of(items, "changing_facts")) == kept, answer
+        assert st.dropped_answer_mismatch == 1 - kept
