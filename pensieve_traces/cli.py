@@ -4,6 +4,8 @@
 - ``pensieve-traces build convomem INPUT... --out DIR --model M``: a ConvoMem dataset from
   Claude Code sessions and claude.ai exports; redacted text goes to a model endpoint
   (local by default).
+- ``pensieve-traces check-convomem DIR``: structure check of a generated ConvoMem dataset; reads
+  only DIR, exit 1 when there is a problem.
 - ``pensieve-traces upload DIR --repo USER/NAME``: the only command that contacts the Hub.
 """
 
@@ -28,6 +30,7 @@ from pensieve_traces.builders.convomem import (
     item_prompt_hashes,
     prompt_hashes,
 )
+from pensieve_traces.builders.convomem import check as convomem_check
 from pensieve_traces.builders.convomem import dataset as convomem_dataset
 from pensieve_traces.builders.convomem.extract import ExtractStats
 from pensieve_traces.builders.convomem.items import Stats
@@ -189,6 +192,20 @@ def _convert(args: argparse.Namespace) -> None:
         for w in caught:
             print(f"pensieve-traces: warning: {w.message}", file=sys.stderr)
         print(out_dir / f"{session.id}.jsonl")
+
+
+def _check_convomem(args: argparse.Namespace) -> None:
+    root = Path(args.dir)
+    if not root.is_dir():
+        raise CliError(f"no such directory: {root}")
+    problems = convomem_check.check_dataset(root)
+    for folder, (files, items) in convomem_check.summarize(root).items():
+        print(f"{folder}: {files} files, {items} items")
+    for problem in problems:
+        print(problem)
+    print(f"{len(problems)} problems" if problems else "ok")
+    if problems:
+        raise SystemExit(1)
 
 
 def _warn(message: str) -> None:
@@ -493,6 +510,12 @@ def _parser() -> argparse.ArgumentParser:
         help="send and write unredacted text (redaction is the default)",
     )
     cm.set_defaults(func=_build_convomem)
+    chk = sub.add_parser(
+        "check-convomem",
+        help="check the structure of a generated ConvoMem dataset (reads only DIR)",
+    )
+    chk.add_argument("dir", help="dataset directory (core_benchmark/ inside)")
+    chk.set_defaults(func=_check_convomem)
     up = sub.add_parser("upload", help="upload converted traces to a Hugging Face dataset")
     up.add_argument("input", help="directory of converted *.jsonl files")
     up.add_argument("--repo", required=True, help="dataset repo id, <user>/<name>")
