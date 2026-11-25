@@ -1192,7 +1192,7 @@
 
 <h1 id="uploading-to-the-hub">Uploading to the Hub<a class="headerlink" href="#uploading-to-the-hub" title="Permanent link">&para;</a></h1>
 <p><code>pensieve-traces upload</code> pushes converted traces to a Hugging Face dataset, <strong>private by default</strong>. Uploading is always intentional: <code>upload</code> is the only command that contacts the Hub, and <code>convert</code> and every other command only write local files. It needs the optional extra and your own login (<code>hf auth login</code>); the tool never asks for, stores or prints a token.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"pensieve-traces[hub]"</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"pensieve-traces[hub] @ git+https://github.com/rahmansunny071/pensieve-traces@v0.1.0"</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>pensieve-traces<span class="w"> </span>upload<span class="w"> </span>traces/<span class="w"> </span>--repo<span class="w"> </span>&lt;user&gt;/&lt;dataset&gt;<span class="w">   </span><span class="c1"># private unless --public</span>
 </code></pre></div>
 <ul>

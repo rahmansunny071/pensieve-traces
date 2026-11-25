@@ -1200,7 +1200,7 @@
 
 <h1 id="convert-claude-code-sessions">Convert Claude Code sessions<a class="headerlink" href="#convert-claude-code-sessions" title="Permanent link">&para;</a></h1>
 <p><code>pensieve-traces convert</code> turns a Claude Code session file or project directory, or a claude.ai export, into <a href="https://huggingface.co/docs/hub/main/en/session-traces-format">STS</a> JSONL for the Hugging Face trace viewer, one <code>&lt;session id&gt;.jsonl</code> per session (stdlib only):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"pensieve-traces[redact]"</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"pensieve-traces[redact] @ git+https://github.com/rahmansunny071/pensieve-traces@v0.1.0"</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>pensieve-traces<span class="w"> </span>convert<span class="w"> </span>path/to/&lt;project-dir&gt;<span class="w"> </span>--to<span class="w"> </span>sts<span class="w"> </span>--out<span class="w"> </span>traces/
 </code></pre></div>
 <ul>

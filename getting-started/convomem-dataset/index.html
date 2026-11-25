@@ -1200,7 +1200,7 @@
 
 <h1 id="build-a-convomem-dataset">Build a ConvoMem dataset<a class="headerlink" href="#build-a-convomem-dataset" title="Permanent link">&para;</a></h1>
 <p><code>pensieve-traces build convomem</code> turns Claude Code sessions and claude.ai chats, together, into a <a href="https://huggingface.co/datasets/Salesforce/ConvoMem">ConvoMem</a>-style memory dataset about you (one persona, <code>me</code>): a model finds facts in your conversations and writes questions and answers across ConvoMem's six categories, and code checks that the evidence is verbatim.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"pensieve-traces[redact]"</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"pensieve-traces[redact] @ git+https://github.com/rahmansunny071/pensieve-traces@v0.1.0"</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>pensieve-traces<span class="w"> </span>build<span class="w"> </span>convomem<span class="w"> </span>path/to/&lt;project-dir&gt;<span class="w"> </span>path/to/claude-export<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span>--out<span class="w"> </span>dataset/<span class="w"> </span>--model<span class="w"> </span>qwen3:14b<span class="w"> </span><span class="o">[</span>--topics<span class="w"> </span>topics.json<span class="o">]</span>
 </code></pre></div>

@@ -1272,7 +1272,7 @@
 <p class="admonition-title">Privacy</p>
 <p>Traces can contain prompts, tool output, local paths, secrets, private code and personal data. Redaction is on by default, but review anything before you publish it, and keep datasets private when unsure.</p>
 </div>
-<p>Install the optional extra to enable redaction: <code>pip install "pensieve-traces[redact]"</code> (uses <a href="https://pypi.org/project/teich/">teich</a>'s <code>TraceAnonymizer</code>; the base install has no dependencies).</p>
+<p>Install the optional extra to enable redaction: <code>pip install "pensieve-traces[redact] @ git+https://github.com/rahmansunny071/pensieve-traces@v0.1.0"</code> (uses <a href="https://pypi.org/project/teich/">teich</a>'s <code>TraceAnonymizer</code>; the base install has no dependencies).</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pensieve_traces</span><span class="w"> </span><span class="kn">import</span> <span class="n">prepare_for_output</span><span class="p">,</span> <span class="n">redact_session</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">safe</span> <span class="o">=</span> <span class="n">prepare_for_output</span><span class="p">(</span><span class="n">session</span><span class="p">)</span>  <span class="c1"># redacts by default; raises if teich is missing</span>

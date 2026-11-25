@@ -1033,6 +1033,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -1049,6 +1067,49 @@
   
 
       </a>
+      
+        
+
+  
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#unreleased" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unreleased
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#010-2026-11-25" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1.0 (2026-11-25)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -1168,6 +1229,36 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#unreleased" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unreleased
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#010-2026-11-25" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1.0 (2026-11-25)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -1191,31 +1282,34 @@
 
 
 <h1 id="changelog">Changelog<a class="headerlink" href="#changelog" title="Permanent link">&para;</a></h1>
+<h2 id="unreleased">Unreleased<a class="headerlink" href="#unreleased" title="Permanent link">&para;</a></h2>
+<h2 id="010-2026-11-25">0.1.0 (2026-11-25)<a class="headerlink" href="#010-2026-11-25" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Unreleased: Repository scaffold and agent factory (CLAUDE.md, factory commands, workflows, CI).</li>
-<li>Unreleased: Canonical session model (<code>Session</code>, <code>Message</code>, <code>ToolCall</code>, <code>Usage</code>, <code>Role</code>) with lossless JSON round-trip (#1).</li>
-<li>Unreleased: Claude Code reader (<code>read_session</code>, <code>read_project</code>) from raw session JSONL to the canonical <code>Session</code> (#2).</li>
-<li>Unreleased: Redaction pass on by default (<code>redact_session</code>, <code>prepare_for_output</code>, optional <code>pensieve-traces[redact]</code> extra using teich) (#3).</li>
-<li>Unreleased: STS writer (<code>write_session</code>, <code>session_to_sts_lines</code>) and <code>pensieve-traces convert --to sts</code> CLI (#4).</li>
-<li>Unreleased: <code>pensieve-traces upload</code> to a private Hugging Face dataset (optional <code>pensieve-traces[hub]</code> extra); STS writer adds the <code>pensieveRedacted</code> header key (#6).</li>
-<li>Unreleased: <code>convert</code> refuses an <code>--out</code> directory that would overwrite the input session files (#36).</li>
-<li>Unreleased: ConvoMem conversations export (<code>convert --to convomem-conversations</code>, <code>write_conversations</code>, <code>sessions_to_conversations</code>) with a message-ID map (#5).</li>
-<li>Unreleased: README states that uploading is always intentional: only <code>pensieve-traces upload</code> contacts the Hub.</li>
-<li>Unreleased: Factory skill updated to agent-factory v0.6.0 (docs-with-code rule and Documentation tech-debt tracker; ready-to-merge hand-off when a merge is refused, agent-factory#32); new <code>factory:ready-to-merge</code> label.</li>
-<li>Unreleased: Factory skill synced to agent-factory v0.8.0 with its new <code>sync-root-factory</code> skill (version marker <code>.claude/skills/factory/VERSION</code>), plus the <code>factory-lesson</code> skill; the Reality check now reads a <code>Real data:</code> line from <code>CLAUDE.md</code> (missing means <code>never</code>).</li>
-<li>Unreleased: claude.ai export reader (<code>pensieve_traces.readers.claude_ai.read_export</code>, <code>ClaudeAiParseError</code>) from <code>conversations.json</code> to canonical <code>Session</code>s; README intro, readers diagram and STS status row updated (#46, #44).</li>
-<li>Unreleased: ConvoMem builder 1/3: <code>OpenAICompatibleClient</code> (stdlib, local Ollama by default) and <code>extract_candidates</code> find candidate memory facts in conversations, with a per-window cache; prompts adapted from Salesforce ConvoMem (Apache-2.0, <code>NOTICE</code>) (#8).</li>
-<li>Unreleased: <code>convert</code> accepts a claude.ai export (directory or <code>conversations.json</code>) for <code>sts</code> and <code>convomem-conversations</code>; input is auto-detected, <code>--from {claude-code,claude-ai}</code> overrides, <code>load_sessions</code> is the reusable loader; <code>--out</code> inside an export directory is refused (#47).</li>
-<li>Unreleased: ConvoMem builder 2/3: <code>build_items</code> turns candidate facts into evidence items (question, answer, verbatim evidence) for the six ConvoMem categories, with code checks (one conversation per evidence message, verbatim evidence, chronology, duplicate questions, convomem-arena's filler check) and model verification with ConvoMem's judge prompts; every model call is cached; shared reply parsing and cache moved to <code>builders/convomem/_common.py</code> (#54).</li>
-<li>Unreleased: Redaction coverage on chat personal data is measured and pinned (<code>tests/test_redact_chat_coverage.py</code>, README "Redaction" table, teich 0.3.8); <code>upload</code> warns before the confirmation prompt, also with <code>--yes</code>, how many files are claude.ai chats and what redaction does not catch; new <code>upload.count_harness</code> (#48).</li>
-<li>Unreleased: ConvoMem builder 3/3: <code>pensieve-traces build convomem INPUT... --out DIR --model M</code> builds a ConvoMem dataset (evidence items for six categories, filler without evidence conversations, <code>build_manifest.json</code>) from Claude Code sessions and claude.ai exports in any mix; one redaction pass before any model call, local-only endpoint unless <code>--allow-remote-model</code>, optional <code>--topics</code>, cache beside the dataset, no-clobber output (<code>builders/convomem/dataset.py</code>, <code>topics.py</code>) (#55).</li>
-<li>Unreleased: <code>pensieve-traces check-convomem DIR</code> and <code>builders.convomem.check_dataset(path) -&gt; list[Problem]</code> check the structure of a generated ConvoMem dataset (category and count folders, verbatim evidence from distinct conversations, changing-evidence order, filler without evidence conversations); README documents running convomem-arena's full check once convomem-arena#18 lands (#9).</li>
-<li>Unreleased: Redaction replaces an email address directly followed by a period (teich 0.3.8 left <code>mail a@b.invalid.</code> unredacted) with the same placeholder as the bare address, in text, metadata keys and values and tool arguments (<code>_EmailPeriodGuard</code> in <code>redact.py</code>); README "Redaction" table and pinned coverage rows updated (#67).</li>
-<li>Unreleased: README: the ConvoMem dataset row says local-folder runs need convomem-arena#18, and the factory intro matches opt-in merges by the <code>factory</code> skill (#74).</li>
-<li>Unreleased: README: ConvoMem conversations no longer claim convomem-arena loads them from a local folder today (needs convomem-arena#18) (#77).</li>
-<li>Unreleased: README: new "Letting the factory merge for you" subsection (the heading the <code>factory</code> skill points to) holds the opt-in merge permission rule (#79).</li>
-<li>Unreleased: Documentation site at https://rahmansunny071.github.io/pensieve-traces/ (MkDocs Material: <code>mkdocs.yml</code>, <code>docs/</code>, <code>overrides/</code>), published to <code>gh-pages</code> by the new <code>.github/workflows/docs.yml</code>; new optional <code>docs</code> extra (<code>mkdocs-material</code>); the README is now a landing page with a quick start, and the sections that moved are on the site (#81).</li>
-<li>Unreleased: package metadata links the docs site (<code>Documentation</code>, <code>Changelog</code> in <code>[project.urls]</code>); the repo's About box links it too (#84).</li>
+<li>Installs come from GitHub, pinned to the release tag; the package is not on PyPI; <code>__version__</code> reads the installed version; install hints point at GitHub (#86).</li>
+<li>Repository scaffold and agent factory (CLAUDE.md, factory commands, workflows, CI).</li>
+<li>Canonical session model (<code>Session</code>, <code>Message</code>, <code>ToolCall</code>, <code>Usage</code>, <code>Role</code>) with lossless JSON round-trip (#1).</li>
+<li>Claude Code reader (<code>read_session</code>, <code>read_project</code>) from raw session JSONL to the canonical <code>Session</code> (#2).</li>
+<li>Redaction pass on by default (<code>redact_session</code>, <code>prepare_for_output</code>, optional <code>pensieve-traces[redact]</code> extra using teich) (#3).</li>
+<li>STS writer (<code>write_session</code>, <code>session_to_sts_lines</code>) and <code>pensieve-traces convert --to sts</code> CLI (#4).</li>
+<li><code>pensieve-traces upload</code> to a private Hugging Face dataset (optional <code>pensieve-traces[hub]</code> extra); STS writer adds the <code>pensieveRedacted</code> header key (#6).</li>
+<li><code>convert</code> refuses an <code>--out</code> directory that would overwrite the input session files (#36).</li>
+<li>ConvoMem conversations export (<code>convert --to convomem-conversations</code>, <code>write_conversations</code>, <code>sessions_to_conversations</code>) with a message-ID map (#5).</li>
+<li>README states that uploading is always intentional: only <code>pensieve-traces upload</code> contacts the Hub.</li>
+<li>Factory skill updated to agent-factory v0.6.0 (docs-with-code rule and Documentation tech-debt tracker; ready-to-merge hand-off when a merge is refused, agent-factory#32); new <code>factory:ready-to-merge</code> label.</li>
+<li>Factory skill synced to agent-factory v0.8.0 with its new <code>sync-root-factory</code> skill (version marker <code>.claude/skills/factory/VERSION</code>), plus the <code>factory-lesson</code> skill; the Reality check now reads a <code>Real data:</code> line from <code>CLAUDE.md</code> (missing means <code>never</code>).</li>
+<li>claude.ai export reader (<code>pensieve_traces.readers.claude_ai.read_export</code>, <code>ClaudeAiParseError</code>) from <code>conversations.json</code> to canonical <code>Session</code>s; README intro, readers diagram and STS status row updated (#46, #44).</li>
+<li>ConvoMem builder 1/3: <code>OpenAICompatibleClient</code> (stdlib, local Ollama by default) and <code>extract_candidates</code> find candidate memory facts in conversations, with a per-window cache; prompts adapted from Salesforce ConvoMem (Apache-2.0, <code>NOTICE</code>) (#8).</li>
+<li><code>convert</code> accepts a claude.ai export (directory or <code>conversations.json</code>) for <code>sts</code> and <code>convomem-conversations</code>; input is auto-detected, <code>--from {claude-code,claude-ai}</code> overrides, <code>load_sessions</code> is the reusable loader; <code>--out</code> inside an export directory is refused (#47).</li>
+<li>ConvoMem builder 2/3: <code>build_items</code> turns candidate facts into evidence items (question, answer, verbatim evidence) for the six ConvoMem categories, with code checks (one conversation per evidence message, verbatim evidence, chronology, duplicate questions, convomem-arena's filler check) and model verification with ConvoMem's judge prompts; every model call is cached; shared reply parsing and cache moved to <code>builders/convomem/_common.py</code> (#54).</li>
+<li>Redaction coverage on chat personal data is measured and pinned (<code>tests/test_redact_chat_coverage.py</code>, README "Redaction" table, teich 0.3.8); <code>upload</code> warns before the confirmation prompt, also with <code>--yes</code>, how many files are claude.ai chats and what redaction does not catch; new <code>upload.count_harness</code> (#48).</li>
+<li>ConvoMem builder 3/3: <code>pensieve-traces build convomem INPUT... --out DIR --model M</code> builds a ConvoMem dataset (evidence items for six categories, filler without evidence conversations, <code>build_manifest.json</code>) from Claude Code sessions and claude.ai exports in any mix; one redaction pass before any model call, local-only endpoint unless <code>--allow-remote-model</code>, optional <code>--topics</code>, cache beside the dataset, no-clobber output (<code>builders/convomem/dataset.py</code>, <code>topics.py</code>) (#55).</li>
+<li><code>pensieve-traces check-convomem DIR</code> and <code>builders.convomem.check_dataset(path) -&gt; list[Problem]</code> check the structure of a generated ConvoMem dataset (category and count folders, verbatim evidence from distinct conversations, changing-evidence order, filler without evidence conversations); README documents running convomem-arena's full check once convomem-arena#18 lands (#9).</li>
+<li>Redaction replaces an email address directly followed by a period (teich 0.3.8 left <code>mail a@b.invalid.</code> unredacted) with the same placeholder as the bare address, in text, metadata keys and values and tool arguments (<code>_EmailPeriodGuard</code> in <code>redact.py</code>); README "Redaction" table and pinned coverage rows updated (#67).</li>
+<li>README: the ConvoMem dataset row says local-folder runs need convomem-arena#18, and the factory intro matches opt-in merges by the <code>factory</code> skill (#74).</li>
+<li>README: ConvoMem conversations no longer claim convomem-arena loads them from a local folder today (needs convomem-arena#18) (#77).</li>
+<li>README: new "Letting the factory merge for you" subsection (the heading the <code>factory</code> skill points to) holds the opt-in merge permission rule (#79).</li>
+<li>Documentation site at https://rahmansunny071.github.io/pensieve-traces/ (MkDocs Material: <code>mkdocs.yml</code>, <code>docs/</code>, <code>overrides/</code>), published to <code>gh-pages</code> by the new <code>.github/workflows/docs.yml</code>; new optional <code>docs</code> extra (<code>mkdocs-material</code>); the README is now a landing page with a quick start, and the sections that moved are on the site (#81).</li>
+<li>package metadata links the docs site (<code>Documentation</code>, <code>Changelog</code> in <code>[project.urls]</code>); the repo's About box links it too (#84).</li>
 </ul>
 
 
