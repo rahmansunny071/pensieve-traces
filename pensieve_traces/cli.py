@@ -11,6 +11,8 @@ from pathlib import Path
 
 from pensieve_traces import upload as hub_upload
 from pensieve_traces.model import Session
+from pensieve_traces.readers import claude_ai
+from pensieve_traces.readers.claude_ai import ClaudeAiParseError
 from pensieve_traces.readers.claude_code import ClaudeCodeParseError, read_project, read_session
 from pensieve_traces.redact import RedactionUnavailableError
 from pensieve_traces.writers import convomem, sts
@@ -29,12 +31,51 @@ class CliError(Exception):
     pass
 
 
-def _load(input_path: Path) -> list[Session]:
+SOURCES = ("claude-code", "claude-ai")
+_EXPORT_FILE = "conversations.json"
+
+
+def load_sessions(input_path: Path, source: str | None = None) -> list[Session]:
+    """Read one input (any supported source) into sessions; the single input-detection point.
+
+    ``source`` is ``None`` (detect), ``"claude-code"`` or ``"claude-ai"``. Detection:
+
+    - a file named ``conversations.json`` is a claude.ai export; any other file is one Claude
+      Code session ``.jsonl``;
+    - a directory holding ``conversations.json`` and no ``*.jsonl`` is a claude.ai export;
+      one holding ``*.jsonl`` and no ``conversations.json`` is a Claude Code project.
+
+    Raises :class:`CliError` if the path is missing, a directory is ambiguous (holds both) or
+    holds neither, or ``source`` forces a layout the path lacks; reader parse errors
+    (:class:`ClaudeCodeParseError`, :class:`ClaudeAiParseError`) propagate. Prints nothing and
+    does no redaction.
+    """
+    if source not in (None, *SOURCES):
+        raise CliError(f"unknown source {source!r}; expected one of {', '.join(SOURCES)}")
     if input_path.is_dir():
-        if not any(p.is_file() for p in input_path.glob("*.jsonl")):
+        has_export = (input_path / _EXPORT_FILE).is_file()
+        has_jsonl = any(p.is_file() for p in input_path.glob("*.jsonl"))
+        if source is None:
+            if has_export and has_jsonl:
+                raise CliError(
+                    f"ambiguous input {input_path}: it holds {_EXPORT_FILE} and *.jsonl files; "
+                    "pass --from claude-code or --from claude-ai"
+                )
+            if not (has_export or has_jsonl):
+                raise CliError(f"no *.jsonl session files or {_EXPORT_FILE} in {input_path}")
+            source = "claude-ai" if has_export else "claude-code"
+        if source == "claude-ai":
+            if not has_export:
+                raise CliError(f"no {_EXPORT_FILE} in {input_path}")
+            return claude_ai.read_export(input_path)
+        if not has_jsonl:
             raise CliError(f"no *.jsonl session files in {input_path}")
         return read_project(input_path)
     if input_path.is_file():
+        if source is None:
+            source = "claude-ai" if input_path.name == _EXPORT_FILE else "claude-code"
+        if source == "claude-ai":
+            return claude_ai.read_export(input_path)
         return [read_session(input_path)]
     raise CliError(f"no such file or directory: {input_path}")
 
@@ -94,7 +135,7 @@ def _write_convomem(sessions: list[Session], out_dir: Path, *, redact: bool) -> 
 
 def _convert(args: argparse.Namespace) -> None:
     input_path = Path(args.input)
-    sessions = _load(input_path)
+    sessions = load_sessions(input_path, args.source)
     if args.to == CONVOMEM:
         _convert_convomem(args, input_path, sessions)
         return
@@ -178,7 +219,18 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="pensieve-traces")
     sub = parser.add_subparsers(dest="command", required=True)
     conv = sub.add_parser("convert", help="convert session traces to a shareable format")
-    conv.add_argument("input", help="a session .jsonl file or a project directory")
+    conv.add_argument(
+        "input",
+        help="a Claude Code session .jsonl file or project directory, "
+        "or a claude.ai export directory or conversations.json",
+    )
+    conv.add_argument(
+        "--from",
+        dest="source",
+        choices=SOURCES,
+        default=None,
+        help="input source (default: detected from the input)",
+    )
     conv.add_argument("--to", required=True, choices=TARGETS, help="output format")
     conv.add_argument(
         "--out",
@@ -214,7 +266,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         args.func(args)
-    except (CliError, ClaudeCodeParseError, OSError) as exc:
+    except (CliError, ClaudeCodeParseError, ClaudeAiParseError, OSError) as exc:
         print(f"pensieve-traces: error: {exc}", file=sys.stderr)
         return 1
     return 0
