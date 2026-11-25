@@ -51,3 +51,9 @@ Answered by the maintainer (recorded on PR #82): (a), (b) and (c) approved exact
 
 ## Size estimate
 M
+
+## Implementation notes
+
+- Built in PR #82: mkdocs-material site (`mkdocs.yml`, `docs/` with 21 pages, `overrides/`), modelled on convomem-arena's; README cut to a landing page with a quick start and the two stubs the factory skill links to; `docs` extra; `.github/workflows/docs.yml` deploying to `gh-pages` (maintainer-approved, recorded on the PR); changelog rendered from `CHANGELOG.md` via `pymdownx.snippets`.
+- Code review (6064300316): nothing lost (paragraph-by-paragraph check), strict build clean, CLI page identical to `--help`, workflow identical to the model. One blocker fixed by the orchestrator in 208a00a (the README factory stub said "merged by the maintainer", undoing #74), plus three accuracy fixes on new pages (guard wording, undashed SSN in limitations, upload row in the Python API).
+- Follow-ups: `mkdocs build --strict` in CI → #83 (lane F, needs ci.yml approval); `docs/` in CLAUDE.md's docs list → added to #50 (maintainer's edit). Material for MkDocs prints an end-of-life banner naming Zensical as its successor.
