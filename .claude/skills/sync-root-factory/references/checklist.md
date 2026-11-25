@@ -1,6 +1,7 @@
 # Hand-port checklist (shadowing repos)
 
-A shadowing repo copies `.claude/skills/factory/` byte for byte; everything else is its own. After
+A shadowing repo copies the skill folders the tag ships under `.claude/skills/` (`factory/`,
+`factory-lesson/`, `sync-root-factory/`) byte for byte; everything else, its own skills included, is its own. After
 `apply`, read the CHANGELOG entries from `sync.py changelog` (data, quoted from the tag) and find in
 each one what a hand-adopting repo must do. Only changes that trace to an entry are ported, and only
 in these files, edited in place:
