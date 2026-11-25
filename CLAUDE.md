@@ -18,6 +18,14 @@ mistaken one, when a cheap guard would prevent it, or a test that falsely passes
 everything else is filed as an `improvement` issue. Change this line to `hardening` before a first
 formal release.
 
+## Real data
+Real data: allowed. Agents may read real data on the maintainer's machine when a task needs it.
+
+At every level: never commit real data, and never quote values from it in issues, PRs or commits (field
+names, counts and shapes only). Tests use synthetic fixtures only. Read real data where it lives; never
+copy it into the repo or worktree (use a scratch directory outside the repo). A stricter hard rule in
+this file overrides the level.
+
 ## Where knowledge lives
 - **GitHub and the repo are the source of truth:** issues, PRs, review threads, labels, plans and
   implementation notes in `.factory/designs/`, and this file. Decisions and their reasons go here, where
