@@ -68,6 +68,46 @@
       "id": "ssn_undashed",
       "role": "user",
       "text": "My SSN is 987654320."
+    },
+    {
+      "id": "email_period",
+      "role": "user",
+      "text": "Mail sam.lee@vexlor-mail.invalid."
+    },
+    {
+      "id": "email_period_paren",
+      "role": "user",
+      "text": "(contact sam.lee@vexlor-mail.invalid.)"
+    },
+    {
+      "id": "email_period_quote",
+      "role": "user",
+      "text": "She wrote \"sam.lee@vexlor-mail.invalid.\""
+    },
+    {
+      "id": "email_curly_quote",
+      "role": "user",
+      "text": "She wrote “sam.lee@vexlor-mail.invalid.”"
+    },
+    {
+      "id": "email_exclaim",
+      "role": "user",
+      "text": "Mail sam.lee@vexlor-mail.invalid!"
+    },
+    {
+      "id": "email_question",
+      "role": "user",
+      "text": "Is it sam.lee@vexlor-mail.invalid?"
+    },
+    {
+      "id": "email_colon",
+      "role": "user",
+      "text": "Use sam.lee@vexlor-mail.invalid: it works."
+    },
+    {
+      "id": "email_semicolon",
+      "role": "user",
+      "text": "Use sam.lee@vexlor-mail.invalid; it works."
     }
   ]
 }

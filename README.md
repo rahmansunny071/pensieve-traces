@@ -38,11 +38,11 @@ copy = redact_session(session)  # scrubbed deep copy, input untouched
 
 `build convomem` also redacts through `prepare_for_output`, once over all inputs, before any model call. Writers must obtain their session through `prepare_for_output`. It never falls back to unredacted output: without the extra it raises `RedactionUnavailableError`. Ids, tool names, timestamps and usage are left as is. Redaction is pattern-based and best-effort, so review output before sharing.
 
-**What redaction covers on chat content.** teich was tuned on coding sessions. Measured with teich 0.3.8 (the version `uv.lock` pins) on a synthetic claude.ai-style chat (`tests/fixtures/redact/chat_pii_session.json`), pinned by `tests/test_redact_chat_coverage.py` so a teich upgrade that changes coverage shows up as a test change:
+**What redaction covers on chat content.** teich was tuned on coding sessions. Measured on `redact_session` (teich 0.3.8, the version `uv.lock` pins, plus a small pre-pass that also replaces an email address directly followed by a period) on a synthetic claude.ai-style chat (`tests/fixtures/redact/chat_pii_session.json`), pinned by `tests/test_redact_chat_coverage.py` so a teich upgrade that changes coverage shows up as a test change:
 
 | Kind | Replaced |
 |---|---|
-| email address | yes |
+| email address, also when followed by `.`, `.)`, `."`, a curly quote, `!`, `?`, `:` or `;` | yes |
 | dashed SSN-style number (`987-65-4320`) | yes |
 | street address after "I live at" | yes |
 | 10-digit phone after a phrase like "Call me at" | yes |
@@ -55,7 +55,7 @@ copy = redact_session(session)  # scrubbed deep copy, input untouched
 | health detail | no |
 | money amount | no |
 
-Phone and address matching depends on the surrounding phrasing (teich 0.3.8 replaces an address only after phrases like "I live at" or "address:"; "My address is …", "Send it to …" and "Deliver to …" are left as is). Redaction does not catch chat personal data in general: review claude.ai traces before sharing them.
+Not covered: an address followed by a period and then a single letter or digit with no space (`name@host.invalid.I will`, `.5`), which teich also misses. Phone and address matching depends on the surrounding phrasing (teich 0.3.8 replaces an address only after phrases like "I live at" or "address:"; "My address is …", "Send it to …" and "Deliver to …" are left as is). Redaction does not catch chat personal data in general: review claude.ai traces before sharing them.
 
 ## Canonical model
 
