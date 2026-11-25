@@ -198,6 +198,15 @@ def test_output_flows_through_writers():
         ([{"chat_messages": []}], "no string uuid", "conversations[0]"),
         ([{"uuid": "c"}], "chat_messages", "conversations[0]"),
         (conv(msg(sender="robot")), "unknown sender", "conversations[0].chat_messages[0]"),
+        (  # an unknown sender on a dropped branch still raises
+            conv(
+                msg("a"),
+                msg("b", "a", sender="robot", created="2026-03-01T10:01:00Z"),
+                msg("c", "a", sender="assistant", created="2026-03-01T10:02:00Z"),
+            ),
+            "unknown sender",
+            "conversations[0].chat_messages[1]",
+        ),
         (conv(msg(created="2026-03-01T10:00:00")), "timezone-aware", "chat_messages[0].created_at"),
         (conv(msg(created="nope")), "bad timestamp", "chat_messages[0].created_at"),
         (conv({"uuid": "m", "sender": "human"}), "missing timestamp", "chat_messages[0]"),

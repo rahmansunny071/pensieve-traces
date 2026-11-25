@@ -156,6 +156,11 @@ class _Reader:
                 raise self.fail(mloc, "message has no string uuid")
             if muuid in by_uuid:
                 raise self.fail(mloc, f"repeated message uuid {muuid!r}")
+            if raw.get("sender") not in (
+                "human",
+                "assistant",
+            ):  # every branch, not only the kept one
+                raise self.fail(mloc, f"unknown sender {raw.get('sender')!r}")
             parent = raw.get("parent_message_uuid")
             if parent is not None and not isinstance(parent, str):
                 raise self.fail(mloc, "parent_message_uuid is not a string")
