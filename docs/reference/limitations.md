@@ -5,7 +5,7 @@ description: "What pensieve-traces does not do or cannot verify."
 
 # Limitations
 
-- **Redaction is best-effort.** It is pattern-based and misses names, health details, money amounts, card numbers and IBANs in chats, and some addresses and phone numbers. See the [measured coverage](../concepts/redaction.md#what-redaction-covers-on-chat-content).
+- **Redaction is best-effort.** It is pattern-based and misses names, health details, money amounts, card numbers, IBANs and undashed SSN-style numbers in chats, and some addresses and phone numbers. See the [measured coverage](../concepts/redaction.md#what-redaction-covers-on-chat-content).
 - **Email followed by a period and then text** with no space (`name@host.invalid.I will`) is not covered.
 - **The Hub's rendering of the `claude.ai` harness id is unverified** (STS only lists `llama.app`).
 - **OpenRouter Broadcast** output is planned, not available. Other agent readers (codex, pi) are later.

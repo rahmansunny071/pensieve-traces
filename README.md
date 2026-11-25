@@ -39,7 +39,7 @@ The first command writes Hugging Face STS traces from Claude Code sessions (a cl
 
 ## How this repo is built
 
-An issue-driven agent factory (designs, builds and reviews by agents, merged by the maintainer). See [How this repo is built](https://rahmansunny071.github.io/pensieve-traces/reference/factory/).
+An issue-driven agent factory: agents design, build and review; the maintainer merges, or the `factory` skill does once the maintainer opts in (below). See [How this repo is built](https://rahmansunny071.github.io/pensieve-traces/reference/factory/).
 
 ### Letting the factory merge for you
 
