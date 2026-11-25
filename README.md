@@ -1,12 +1,12 @@
 # pensieve-traces
 
-**Turn coding-agent session traces into shareable traces and memory datasets.**
+**Turn coding-agent session traces and claude.ai chat exports into shareable traces and memory datasets.**
 
-Claude Code (and other agents) record every session as raw JSONL. Those files hold far more than the conversation: file-history backups, full API request blobs, cost state and UI flags, plus whatever secrets, paths and private code passed through the session. pensieve-traces reads them into one canonical session model, redacts them, and writes:
+Claude Code (and other agents) record every session as raw JSONL. Those files hold far more than the conversation: file-history backups, full API request blobs, cost state and UI flags, plus whatever secrets, paths and private code passed through the session. claude.ai chats can be exported as a data export (`conversations.json`). pensieve-traces reads both into one canonical session model, redacts them, and writes:
 
 | Output | What it is | Status |
 |---|---|---|
-| **STS** | Hugging Face [Session Trace Simple Format](https://huggingface.co/docs/hub/main/en/session-traces-format): one JSONL file per session, viewable on the Hub as an [agent trace](https://huggingface.co/docs/hub/main/en/agent-traces) | planned |
+| **STS** | Hugging Face [Session Trace Simple Format](https://huggingface.co/docs/hub/main/en/session-traces-format): one JSONL file per session, viewable on the Hub as an [agent trace](https://huggingface.co/docs/hub/main/en/agent-traces) | available (`convert --to sts`) |
 | **OpenRouter Broadcast** | One JSON file per model request, with tokens and cost | planned |
 | **ConvoMem conversations** | Sessions as `{id, messages[{speaker, text}]}` conversations, one persona per project, ready to be used as history or filler | available (`convert --to convomem-conversations`) |
 | **ConvoMem dataset** | Questions, answers and evidence pointers generated from a project's sessions, in the [ConvoMem](https://huggingface.co/datasets/Salesforce/ConvoMem) layout, runnable with [convomem-arena](https://github.com/rahmansunny071/convomem-arena) | planned |
@@ -14,6 +14,7 @@ Claude Code (and other agents) record every session as raw JSONL. Those files ho
 ```
 readers                 canonical model                 outputs
 claude_code ─┐          Session                       ┌─ STS writer
+claude_ai   ─┤
 codex (later)├─────►      messages: id, parent_id,  ──┼─ OpenRouter writer
 pi (later)  ─┘            timestamp, role, text,      ├─ ConvoMem conversations
                           reasoning, tool calls,      └─ ConvoMem Q/A builder
@@ -62,6 +63,22 @@ sessions = read_project("path/to/project-dir")  # *.jsonl; subagent files merge 
 ```
 
 Records sharing a `requestId` stay separate messages; token usage is attached only to the last one so sums are not double-counted. Malformed input raises `ClaudeCodeParseError` with the file path and line number. The reader does no redaction.
+
+## Reading claude.ai exports
+
+`pensieve_traces.readers.claude_ai` turns a claude.ai data export (Settings, Privacy, Export data) into canonical sessions, one per conversation (stdlib only). It reads only `conversations.json`; the account block, memories, projects, artifacts, `light_metadata` and the manifest (which holds signed download URLs) are never opened. The `convert` command does not accept exports yet (#47); use the Python API.
+
+```python
+from pensieve_traces.readers.claude_ai import read_export
+
+sessions = read_export("path/to/export-dir")  # or path/to/conversations.json
+```
+
+- Sessions have `harness="claude.ai"` and come back in file order. There is no model name or token usage in the export.
+- Text is built from the `content` blocks (the top-level `text` is unreliable). A human turn becomes a user message; each `injected_prompt_block` (system notes such as the memory header) becomes its own `is_meta` message. An assistant turn with interleaved thinking, tool calls and results is split, in order, into assistant and tool messages.
+- Branches (edited or regenerated turns): only the path to the latest message is kept, and `Session.metadata["dropped_branch_messages"]` counts the rest.
+- Attached files and images become placeholders such as `[attached: name.pdf]`. Attachment text is dropped unless you pass `include_attachments=True`. Web results, image galleries and local resources in tool output are summarised in one line, not copied as JSON.
+- Malformed input raises `ClaudeAiParseError` with the file path and a location such as `conversations[3].chat_messages[7]`. The reader does no redaction, and injected prompt text, thinking and tool output stay in the sessions, so redact before sharing.
 
 ## Converting to STS
 

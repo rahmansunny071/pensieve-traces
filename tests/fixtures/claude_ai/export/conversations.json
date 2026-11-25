@@ -1,0 +1,367 @@
+[
+ {
+  "uuid": "conv-plain",
+  "name": "Plain chat",
+  "summary": "SECRET-SUMMARY",
+  "created_at": "2026-03-01T10:00:00.000000Z",
+  "updated_at": "2026-03-01T10:05:00.000000Z",
+  "account": {
+   "uuid": "ACCOUNT-SENTINEL-0001"
+  },
+  "chat_messages": [
+   {
+    "uuid": "p1",
+    "text": "ignored top-level text",
+    "content": [
+     {
+      "type": "text",
+      "text": "Hello there"
+     }
+    ],
+    "sender": "human",
+    "created_at": "2026-03-01T10:00:01.000000Z",
+    "updated_at": "2026-03-01T10:00:01.000000Z",
+    "attachments": [],
+    "files": [],
+    "parent_message_uuid": "00000000-0000-4000-8000-000000000000"
+   },
+   {
+    "uuid": "p2",
+    "text": "ignored top-level text",
+    "content": [
+     {
+      "type": "text",
+      "text": "Hi, how can I help?"
+     }
+    ],
+    "sender": "assistant",
+    "created_at": "2026-03-01T10:00:02.000000Z",
+    "updated_at": "2026-03-01T10:00:02.000000Z",
+    "attachments": [],
+    "files": [],
+    "parent_message_uuid": "p1"
+   }
+  ]
+ },
+ {
+  "uuid": "conv-tools",
+  "name": "Tool turn",
+  "created_at": "2026-03-02T10:00:00.000000Z",
+  "updated_at": "2026-03-02T10:05:00.000000Z",
+  "account": {
+   "uuid": "ACCOUNT-SENTINEL-0001"
+  },
+  "chat_messages": [
+   {
+    "uuid": "t1",
+    "text": "ignored top-level text",
+    "content": [
+     {
+      "type": "text",
+      "text": "Search the web"
+     }
+    ],
+    "sender": "human",
+    "created_at": "2026-03-01T10:00:01.000000Z",
+    "updated_at": "2026-03-01T10:00:01.000000Z",
+    "attachments": [],
+    "files": [],
+    "parent_message_uuid": "00000000-0000-4000-8000-000000000000"
+   },
+   {
+    "uuid": "t2",
+    "text": "ignored top-level text",
+    "content": [
+     {
+      "type": "thinking",
+      "thinking": "plan it",
+      "summaries": []
+     },
+     {
+      "type": "text",
+      "text": "Searching."
+     },
+     {
+      "type": "tool_use",
+      "id": "tu1",
+      "name": "web_search",
+      "input": {
+       "query": "cats"
+      }
+     },
+     {
+      "type": "tool_result",
+      "tool_use_id": "tu1",
+      "name": "web_search",
+      "is_error": false,
+      "content": [
+       {
+        "type": "knowledge",
+        "title": "Cats A",
+        "url": "https://example.invalid/a"
+       },
+       {
+        "type": "knowledge",
+        "title": "Cats B",
+        "url": "https://example.invalid/b"
+       }
+      ]
+     },
+     {
+      "type": "thinking",
+      "thinking": "summarise",
+      "summaries": []
+     },
+     {
+      "type": "tool_use",
+      "id": "tu2",
+      "name": "fetch",
+      "input": {}
+     },
+     {
+      "type": "tool_result",
+      "tool_use_id": "tu2",
+      "name": "fetch",
+      "is_error": true,
+      "content": [
+       {
+        "type": "text",
+        "text": "boom"
+       },
+       {
+        "type": "image_gallery",
+        "images": [
+         {},
+         {}
+        ]
+       },
+       {
+        "type": "local_resource",
+        "name": "notes.md"
+       },
+       {
+        "type": "mystery"
+       }
+      ]
+     },
+     {
+      "type": "text",
+      "text": "Done."
+     },
+     {
+      "type": "brand_new"
+     }
+    ],
+    "sender": "assistant",
+    "created_at": "2026-03-01T10:00:02.000000Z",
+    "updated_at": "2026-03-01T10:00:02.000000Z",
+    "attachments": [],
+    "files": [],
+    "parent_message_uuid": "t1"
+   },
+   {
+    "uuid": "t3",
+    "text": "ignored top-level text",
+    "content": [
+     {
+      "type": "text",
+      "text": "Thanks"
+     }
+    ],
+    "sender": "human",
+    "created_at": "2026-03-01T10:00:03.000000Z",
+    "updated_at": "2026-03-01T10:00:03.000000Z",
+    "attachments": [],
+    "files": [],
+    "parent_message_uuid": "t2"
+   }
+  ]
+ },
+ {
+  "uuid": "conv-branch",
+  "name": "",
+  "created_at": "2026-03-03T10:00:00.000000Z",
+  "updated_at": "2026-03-03T10:05:00.000000Z",
+  "account": {
+   "uuid": "ACCOUNT-SENTINEL-0001"
+  },
+  "chat_messages": [
+   {
+    "uuid": "b1",
+    "text": "ignored top-level text",
+    "content": [
+     {
+      "type": "text",
+      "text": "First draft"
+     }
+    ],
+    "sender": "human",
+    "created_at": "2026-03-01T10:00:01.000000Z",
+    "updated_at": "2026-03-01T10:00:01.000000Z",
+    "attachments": [],
+    "files": [],
+    "parent_message_uuid": "00000000-0000-4000-8000-000000000000"
+   },
+   {
+    "uuid": "b2",
+    "text": "ignored top-level text",
+    "content": [
+     {
+      "type": "text",
+      "text": "Old answer"
+     }
+    ],
+    "sender": "assistant",
+    "created_at": "2026-03-01T10:00:02.000000Z",
+    "updated_at": "2026-03-01T10:00:02.000000Z",
+    "attachments": [],
+    "files": [],
+    "parent_message_uuid": "b1"
+   },
+   {
+    "uuid": "b3",
+    "text": "ignored top-level text",
+    "content": [
+     {
+      "type": "text",
+      "text": "Edited root"
+     }
+    ],
+    "sender": "human",
+    "created_at": "2026-03-01T10:00:05.000000Z",
+    "updated_at": "2026-03-01T10:00:05.000000Z",
+    "attachments": [],
+    "files": [],
+    "parent_message_uuid": "00000000-0000-4000-8000-000000000000"
+   },
+   {
+    "uuid": "b4",
+    "text": "ignored top-level text",
+    "content": [
+     {
+      "type": "text",
+      "text": "New answer"
+     }
+    ],
+    "sender": "assistant",
+    "created_at": "2026-03-01T10:00:06.000000Z",
+    "updated_at": "2026-03-01T10:00:06.000000Z",
+    "attachments": [],
+    "files": [],
+    "parent_message_uuid": "b3"
+   },
+   {
+    "uuid": "b5",
+    "text": "ignored top-level text",
+    "content": [
+     {
+      "type": "text",
+      "text": "Follow up"
+     }
+    ],
+    "sender": "human",
+    "created_at": "2026-03-01T10:00:07.000000Z",
+    "updated_at": "2026-03-01T10:00:07.000000Z",
+    "attachments": [],
+    "files": [],
+    "parent_message_uuid": "b4"
+   },
+   {
+    "uuid": "b6",
+    "text": "ignored top-level text",
+    "content": [
+     {
+      "type": "text",
+      "text": "Old reply"
+     }
+    ],
+    "sender": "assistant",
+    "created_at": "2026-03-01T10:00:03.000000Z",
+    "updated_at": "2026-03-01T10:00:03.000000Z",
+    "attachments": [],
+    "files": [],
+    "parent_message_uuid": "b2"
+   }
+  ]
+ },
+ {
+  "uuid": "conv-attach",
+  "name": "Attachments",
+  "created_at": "2026-03-04T10:00:00.000000Z",
+  "updated_at": "2026-03-04T10:05:00.000000Z",
+  "account": {
+   "uuid": "ACCOUNT-SENTINEL-0001"
+  },
+  "chat_messages": [
+   {
+    "uuid": "a1",
+    "text": "ignored top-level text",
+    "content": [
+     {
+      "type": "injected_prompt_block",
+      "prompt": "Today is a day.",
+      "injection_source": "system"
+     },
+     {
+      "type": "text",
+      "text": "Read this"
+     },
+     {
+      "type": "document",
+      "title": "Spec.pdf",
+      "file_uuid": "f1"
+     },
+     {
+      "type": "image",
+      "file_uuid": "f2",
+      "source": null
+     }
+    ],
+    "sender": "human",
+    "created_at": "2026-03-01T10:00:01.000000Z",
+    "updated_at": "2026-03-01T10:00:01.000000Z",
+    "attachments": [
+     {
+      "file_name": "spec.txt",
+      "file_size": 10,
+      "file_type": "txt",
+      "extracted_content": "ATTACHMENT-BODY"
+     }
+    ],
+    "files": [
+     {
+      "file_uuid": "f2",
+      "file_name": "pic.png"
+     }
+    ],
+    "parent_message_uuid": "00000000-0000-4000-8000-000000000000"
+   },
+   {
+    "uuid": "a2",
+    "text": "ignored top-level text",
+    "content": [
+     {
+      "type": "text",
+      "text": "Got it"
+     }
+    ],
+    "sender": "assistant",
+    "created_at": "2026-03-01T10:00:02.000000Z",
+    "updated_at": "2026-03-01T10:00:02.000000Z",
+    "attachments": [],
+    "files": [],
+    "parent_message_uuid": "a1"
+   }
+  ]
+ },
+ {
+  "uuid": "conv-empty",
+  "name": "Empty",
+  "created_at": "2026-03-05T10:00:00.000000Z",
+  "updated_at": "2026-03-05T10:00:00.000000Z",
+  "account": {
+   "uuid": "ACCOUNT-SENTINEL-0001"
+  },
+  "chat_messages": []
+ }
+]
