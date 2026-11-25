@@ -119,7 +119,7 @@ pensieve-traces convert path/to/claude-export --to sts --out traces/   # claude.
 
 ## Converting to ConvoMem conversations
 
-`pensieve-traces convert --to convomem-conversations` exports a project's sessions as [ConvoMem](https://huggingface.co/datasets/Salesforce/ConvoMem)-style conversations (one session per conversation, ordered by start time), loadable by [convomem-arena](https://github.com/rahmansunny071/convomem-arena):
+`pensieve-traces convert --to convomem-conversations` exports a project's sessions as [ConvoMem](https://huggingface.co/datasets/Salesforce/ConvoMem)-style conversations (one session per conversation, ordered by start time), in the filler-file layout [convomem-arena](https://github.com/rahmansunny071/convomem-arena) reads (loading them from a local folder needs [convomem-arena#18](https://github.com/rahmansunny071/convomem-arena/issues/18)):
 
 ```bash
 pensieve-traces convert path/to/<project-dir> --to convomem-conversations --out convomem/
