@@ -19,6 +19,7 @@ __all__ = [
     "UploadError",
     "check_redaction",
     "collect_files",
+    "count_harness",
     "require_hub",
     "upload_files",
 ]
@@ -39,14 +40,33 @@ def collect_files(folder: str | Path) -> list[Path]:
     return sorted(p for p in Path(folder).glob("*.jsonl") if p.is_file())
 
 
-def _is_marked_redacted(path: Path) -> bool:
+def _read_header(path: Path) -> dict[str, Any] | None:
+    """The first line of ``path`` as a JSON object, or ``None`` if it is anything else."""
     try:
         with open(path, encoding="utf-8") as fh:
             first = fh.readline()
         header = json.loads(first)
     except (OSError, UnicodeDecodeError, ValueError):
-        return False
-    return isinstance(header, dict) and header.get("pensieveRedacted") is True
+        return None
+    return header if isinstance(header, dict) else None
+
+
+def _is_marked_redacted(path: Path) -> bool:
+    header = _read_header(path)
+    return header is not None and header.get("pensieveRedacted") is True
+
+
+def count_harness(files: list[Path], harness: str) -> int:
+    """Number of files whose STS header line has exactly ``"harness": harness``.
+
+    Reads only the first line of each file; anything odd counts as not matching.
+    """
+    count = 0
+    for f in files:
+        header = _read_header(f)
+        if header is not None and header.get("harness") == harness:
+            count += 1
+    return count
 
 
 def check_redaction(files: list[Path]) -> list[Path]:

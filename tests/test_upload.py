@@ -59,9 +59,9 @@ def tty(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
 
 
-def write(path: Path, marker: Any = True) -> Path:
+def write(path: Path, marker: Any = True, harness: str = "h") -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    header: dict[str, Any] = {"type": "session", "harness": "h", "id": path.stem}
+    header: dict[str, Any] = {"type": "session", "harness": harness, "id": path.stem}
     if marker is not None:
         header["pensieveRedacted"] = marker
     path.write_text(json.dumps(header) + "\n", encoding="utf-8")
@@ -237,3 +237,80 @@ def test_missing_hub_checked_before_summary(tmp_path: Path, monkeypatch, capsys)
     write(tmp_path / "a.jsonl")
     assert up(tmp_path) == 1  # no --yes: must fail before any prompt
     assert "files:" not in capsys.readouterr().out
+
+
+# -- claude.ai chat warning --------------------------------------------------------------
+
+CHAT_WARNING = "claude.ai chats"
+
+
+def test_count_harness_exact_and_never_raises(tmp_path: Path) -> None:
+    write(tmp_path / "ok.jsonl", harness="claude.ai")
+    write(tmp_path / "case.jsonl", harness="Claude.ai")
+    write(tmp_path / "code.jsonl", harness="claude_code")
+    (tmp_path / "nokey.jsonl").write_text(json.dumps({"type": "session"}) + "\n")
+    (tmp_path / "empty.jsonl").write_text("")
+    (tmp_path / "bad.jsonl").write_text("not json\n")
+    (tmp_path / "list.jsonl").write_text("[1]\n")
+    (tmp_path / "bin.jsonl").write_bytes(b"\xff\xfe\n")
+    assert upload.count_harness(upload.collect_files(tmp_path), "claude.ai") == 1
+
+
+def test_warning_with_yes_names_count_and_gaps(tmp_path: Path, hub: type[FakeApi], capsys) -> None:
+    write(tmp_path / "a.jsonl", harness="claude.ai")
+    write(tmp_path / "b.jsonl", harness="claude.ai")
+    write(tmp_path / "c.jsonl", harness="claude_code")
+    assert up(tmp_path, "--yes") == 0
+    err = capsys.readouterr().err
+    assert (
+        'pensieve-traces: warning: 2 files are claude.ai chats (harness "claude.ai"); '
+        "redaction does not catch names, health details, money amounts or card and bank "
+        "account numbers, and catches only some addresses and phone numbers. Review them before uploading."
+    ) in err
+    assert len(commit_call()["operations"]) == 3
+
+
+def test_warning_singular(tmp_path: Path, hub: type[FakeApi], capsys) -> None:
+    write(tmp_path / "a.jsonl", harness="claude.ai")
+    assert up(tmp_path, "--yes") == 0
+    assert "1 file is claude.ai chats" in capsys.readouterr().err
+    assert len(commit_call()["operations"]) == 1
+
+
+def test_no_warning_without_claude_ai_files(tmp_path: Path, hub: type[FakeApi], capsys) -> None:
+    write(tmp_path / "a.jsonl", harness="claude_code")
+    assert up(tmp_path, "--yes") == 0
+    assert CHAT_WARNING not in capsys.readouterr().err
+    assert len(commit_call()["operations"]) == 1
+
+
+def test_warning_comes_before_prompt(
+    tmp_path: Path, hub: type[FakeApi], tty: None, monkeypatch, capsys
+) -> None:
+    write(tmp_path / "a.jsonl", harness="claude.ai")
+    seen: list[str] = []
+
+    def fake_input(_prompt: str) -> str:
+        seen.append(capsys.readouterr().err)
+        return "y"
+
+    monkeypatch.setattr("builtins.input", fake_input)
+    assert up(tmp_path) == 0
+    assert len(seen) == 1 and CHAT_WARNING in seen[0]
+    assert len(commit_call()["operations"]) == 1
+
+
+def test_warning_printed_on_non_tty_abort(tmp_path: Path, hub: type[FakeApi], capsys) -> None:
+    write(tmp_path / "a.jsonl", harness="claude.ai")
+    assert up(tmp_path) == 1
+    err = capsys.readouterr().err
+    assert CHAT_WARNING in err and "pass --yes" in err
+    assert FakeApi.calls == []
+
+
+def test_warning_with_allow_unredacted(tmp_path: Path, hub: type[FakeApi], capsys) -> None:
+    write(tmp_path / "a.jsonl", None, harness="claude.ai")
+    assert up(tmp_path, "--yes", "--allow-unredacted") == 0
+    err = capsys.readouterr().err
+    assert CHAT_WARNING in err and "not marked as redacted" in err
+    assert len(commit_call()["operations"]) == 1

@@ -5,7 +5,8 @@ lazily. Every writer must obtain its session through :func:`prepare_for_output`,
 by default, warns when redaction is disabled and never falls back to unredacted output when
 redaction cannot run.
 
-Redaction is best-effort pattern matching: review anything before you publish it.
+Redaction is best-effort pattern matching: review anything before you publish it. It was tuned
+on coding sessions and misses much chat personal data (see the README "Redaction" table).
 """
 
 from __future__ import annotations
