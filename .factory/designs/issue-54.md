@@ -21,8 +21,8 @@ New `pensieve_traces/builders/convomem/items.py`: `build_items(candidates, sessi
 - Import convomem-arena's checks/judges: not a dependency.
 
 ## Files & interfaces touched
-- NEW `pensieve_traces/builders/convomem/items.py`, 14 prompt files, `tests/test_convomem_items.py`.
-- CHANGED `builders/convomem/__init__.py` (exports, docstring), `NOTICE` (prompts now also write questions and judge answers), `CHANGELOG.md`, this design's implementation notes.
+- NEW `pensieve_traces/builders/convomem/items.py`, `_common.py`, `_text.py`, 14 prompt files, `tests/test_convomem_items.py`.
+- CHANGED `builders/convomem/extract.py` (imports shared helpers, no behaviour change), `builders/convomem/__init__.py` (exports, docstring), `NOTICE` (prompts now also write questions and judge answers), `CHANGELOG.md`, this design's implementation notes.
 
 ## Test plan
 Scripted fake `ChatClient`, synthetic sessions: one test per check with a hand-built failing case; out-of-order changing candidates sorted; a mixed `claude_code` + `claude.ai` item; `verify=False` vs a WRONG judge dropping the item; abstention passes on "I don't know"; range limits per category; cache rerun makes no calls; prompt files load with headers.
@@ -30,9 +30,15 @@ Scripted fake `ChatClient`, synthetic sessions: one test per check with a hand-b
 ## Risks
 Privacy: text goes to the client; sessions must be pre-redacted (docstring, as #8). Long evidence conversations may overflow a small local context (no truncation). Filler term check is a simplified port of convomem-arena's `specifics`. No new dependencies.
 
+## Orchestrator changes (approved)
+- Judge prompts are copied verbatim from ConvoMem `AnsweringEvaluation.scala` (header added, template syntax adapted); wording prompts adapted from the per-category evidence generators.
+- The filler check ports convomem-arena's `check_filler` faithfully, with `specifics` and the `text.py` helpers it uses (same tokenization, thresholds, "numbers alone don't count") into NEW `builders/convomem/_text.py`; tests rewrite some of its own cases as synthetic data. NOTICE gets an attribution line (convomem-arena has no license file; same author as this repo).
+- Abstention answers are model-written; the abstention judge decides pass/fail.
+- Shared helpers (`_parse_reply`, cache functions) move to NEW `builders/convomem/_common.py`, imported by `extract.py` and `items.py`. Extraction's public API, cache keys and `CACHE_FORMAT_VERSION` stay unchanged.
+- Docstring states groups never span `group_chunk` boundaries; `item_prompt_hashes()` keys mirror `prompt_hashes()`.
+
 ## Open questions
-- Abstention answer wording: model-written or fixed text? ConvoMem's generator wasn't checked for this; default model-written.
-- Can the judge prompts and the 80% rule be ported exactly from the Scala source? Verified only through convomem-arena's port.
+None.
 
 ## Size estimate
 M
