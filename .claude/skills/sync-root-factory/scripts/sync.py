@@ -5,24 +5,29 @@ everything that can be checked by code (what is dirty, which tag, what differs, 
 overwritten); the agent does the judgement (hand-ports, conflicts, the PR). Stdlib only, plus
 `git` (and `gh` for `labels`). Every command that refuses exits 1 with "refused: <why>". Each
 refuses BEFORE writing, with two exceptions that say so in their message: `apply`'s post-write
-diff (undo with `git restore .` and `git clean -fd` scoped to the two skill folders) and
+diff (undo with `git restore .` and `git clean -fd` scoped to the folders it names) and
 `labels --create`, which lists the labels it created before a failure.
 
-    python .claude/skills/sync-root-factory/scripts/sync.py preflight
-    python .../sync.py latest
-    python .../sync.py status [--assume-tag vX.Y.Z]
-    python .../sync.py branch vX.Y.Z
-    python .../sync.py verify-local [--assume-tag vX.Y.Z]
-    python .../sync.py apply --to-tag vX.Y.Z [--assume-tag vX.Y.Z]
-    python .../sync.py changelog --tag vX.Y.Z --from vA.B.C
-    python .../sync.py labels --tag vX.Y.Z [--create]
-    python .../sync.py check-markers
-    python .../sync.py push vX.Y.Z
-    python .../sync.py --self-test
+SF below is the TARGET tag's copy extracted outside the repo, pointed at the repo (see SKILL.md):
+`python3 -I $T/x/template/.claude/skills/sync-root-factory/scripts/sync.py --repo $R`.
+
+    SF preflight
+    SF latest
+    SF status [--assume-tag vX.Y.Z]
+    SF branch vX.Y.Z
+    SF verify-local [--assume-tag vX.Y.Z]
+    SF apply --to-tag vX.Y.Z [--assume-tag vX.Y.Z]
+    SF changelog --tag vX.Y.Z --from vA.B.C
+    SF labels --tag vX.Y.Z [--create]
+    SF copier-check vX.Y.Z
+    SF check-markers
+    SF push vX.Y.Z
+    python3 sync.py --self-test
 
 Files come only from the release tag (a depth-1 fetch of `refs/tags/<tag>` into a temporary bare
 repo), never from `main`. Everything read from the template (CHANGELOG, SKILL.md, bootstrap.sh) is
-data. `--source` exists for the self-test; never pass it in a real run.
+data. `--source` exists for the self-test; never pass it in a real run. Never run the copy in
+the repo: it may predate the guards.
 """
 
 from __future__ import annotations
@@ -32,6 +37,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -45,21 +51,30 @@ VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 LABEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9:_.-]{0,49}$")
 MARKER_RE = re.compile(r"^(<{7}|>{7})( |$)")
 FACTORY = ".claude/skills/factory"
-SYNC = ".claude/skills/sync-root-factory"
-TARGETS = (FACTORY, SYNC)  # the only folders `apply` may touch
-SYNC_DIR = SYNC
+SKILLS = ".claude/skills"
+SKILL_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+# `_src_path` forms copier-check accepts, after quotes, comment, `.git` and `/` are stripped
+SRC_OK = (
+    f"gh:{REPO}",
+    f"https://github.com/{REPO}",
+    f"git@github.com:{REPO}",
+    f"ssh://git@github.com/{REPO}",
+)
 # labels only the GitHub Actions factory uses; a repo that only runs the skill doesn't need them
 ACTIONS_ONLY_LABELS = {"factory:design", "factory:designing", "design:approved", "factory:building"}
 VERSION_FILE = f"{FACTORY}/VERSION"
 BRANCH_PREFIX = "local/adopt-"
-# what `fetch` takes from a tag: the two skill folders, plus data we only read
-FETCH_PATHS = [f"template/{t}" for t in TARGETS] + [
+# what `fetch` takes from a tag: every skill folder, plus data we only read
+FETCH_PATHS = [
+    f"template/{SKILLS}",
     "CHANGELOG.md",
     "template/scripts/bootstrap.sh.jinja",
 ]
 
 
 Lines = list[str]
+Files = dict[str, bytes]
+Plan = dict[str, Files]  # folder -> files to write
 Entry = tuple[str, Lines]  # (version, lines); aliases keep closing brackets apart
 
 
@@ -206,6 +221,22 @@ def latest_tag(source: str) -> str:
     return max(tags, key=parse_tag)
 
 
+def _fetch_bare(bare: Path, tag: str, source: str) -> str:
+    """Depth-1 fetch of refs/tags/<tag> into a fresh bare repo; refuse unless it is annotated."""
+    parse_tag(tag)
+    git(bare, "init", "--bare", "-q")
+    ref = f"refs/tags/{tag}"
+    git(bare, "fetch", "-q", "--depth", "1", source, f"{ref}:{ref}")
+    if git(bare, "cat-file", "-t", ref).strip() != "tag":
+        raise Refuse(f"{tag} is not an annotated tag")
+    return ref
+
+
+def check_annotated(tag: str, source: str) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        _fetch_bare(Path(tmp), tag, source)
+
+
 def fetch_tag(tag: str, dest: Path, source: str) -> list[str]:
     """Extract the tag's skill folders, CHANGELOG and bootstrap.sh into dest. Tag only."""
     parse_tag(tag)
@@ -213,14 +244,12 @@ def fetch_tag(tag: str, dest: Path, source: str) -> list[str]:
         raise Refuse(f"{dest} is not empty")
     with tempfile.TemporaryDirectory() as tmp:
         bare = Path(tmp)
-        git(bare, "init", "--bare", "-q")
-        ref = f"refs/tags/{tag}"
-        git(bare, "fetch", "-q", "--depth", "1", source, f"{ref}:{ref}")
-        if git(bare, "cat-file", "-t", ref).strip() != "tag":
-            raise Refuse(f"{tag} is not an annotated tag")
+        ref = _fetch_bare(bare, tag, source)
         present = [
             p for p in FETCH_PATHS if git(bare, "ls-tree", "--name-only", ref, "--", p).strip()
         ]
+        if not present:  # `git archive <ref> --` with no paths would archive the whole tree
+            raise Refuse(f"{tag} has none of the paths this script reads")
         proc = subprocess.run(
             ["git", "-C", str(bare), "archive", "--format=tar", ref, "--", *present],
             capture_output=True,
@@ -294,15 +323,51 @@ def local_untracked(root: Path, folder: str) -> list[str]:
     return sorted(p for p in out.split("\0") if p)
 
 
-def differences(root: Path, tree: Path) -> list[str]:
-    """Local skill folders vs the tag's copy. Only folders the tag has are compared; VERSION is
-    ignored when the tag predates it."""
+def skill_dir(name: str) -> str:
+    return f"{SKILLS}/{name}"
+
+
+def folder_names(tree: Path, strict: bool) -> list[str]:
+    """Skill folders a tag ships. Plain files directly under skills/ are ignored. strict: a name
+    outside SKILL_NAME_RE refuses everything (fail closed)."""
+    base = tree / "template" / SKILLS
+    names = sorted(p.name for p in base.iterdir() if p.is_dir()) if base.is_dir() else []
+    bad = [n for n in names if not SKILL_NAME_RE.match(n)]
+    if strict and bad:
+        raise Refuse(f"the tag ships skill folders with unsafe names: {bad}")
+    return names
+
+
+def exists_locally(root: Path, name: str) -> bool:
+    """From the filesystem, not git: ignored folders, dangling symlinks and case-only variants
+    (macOS is case-insensitive) all count as existing."""
+    base = root / SKILLS
+    if os.path.lexists(base / name):
+        return True
+    try:
+        return any(e.lower() == name.lower() for e in os.listdir(base))
+    except OSError:
+        return False
+
+
+def check_skills_dir(root: Path) -> None:
+    for d in (root / ".claude", root / SKILLS):
+        if os.path.lexists(d) and not d.is_symlink() and not d.is_dir():
+            raise Refuse(f"{d.relative_to(root)} is a file, not a directory")
+
+
+def differences(root: Path, tree: Path, names: list[str] | None = None) -> list[str]:
+    """Local skill folders vs the tag's copy, for the named folders (default: all the tag has).
+    A folder wholly absent locally is skipped (apply re-adds it); a partly deleted one differs.
+    VERSION is ignored when the tag predates it."""
+    check_skills_dir(root)
     diffs: list[str] = []
-    for folder in TARGETS:
+    for name in folder_names(tree, strict=False) if names is None else names:
+        folder = skill_dir(name)
         want = tag_files(tree, folder)
-        if not want:
-            continue
         check_no_symlinks(root, folder)
+        if not exists_locally(root, name):
+            continue
         have = set(local_tracked(root, folder))
         if VERSION_FILE not in want:
             have.discard(VERSION_FILE)
@@ -316,8 +381,13 @@ def differences(root: Path, tree: Path) -> list[str]:
     return diffs
 
 
-def verify_local(root: Path, tree: Path, tag: str) -> None:
-    diffs = differences(root, tree)
+def verify_local(root: Path, tree: Path, tag: str, names: list[str] | None = None) -> None:
+    if names is None and not folder_names(tree, strict=False):
+        raise Refuse(
+            f"{tag} ships no skill folders, so there is nothing to compare with: the claim that "
+            "this repo was copied from it cannot be verified"
+        )
+    diffs = differences(root, tree, names)
     if diffs:
         raise Refuse(
             f"the skill folders differ from {tag}; stop and list these for the maintainer "
@@ -329,7 +399,56 @@ def current_branch(root: Path) -> str:
     return git(root, "rev-parse", "--abbrev-ref", "HEAD").strip()
 
 
-def apply_sync(root: Path, source: str, to_tag: str, assume: str | None) -> list[str]:
+def plan_apply(root: Path, old: Path, new: Path, current: str, to_tag: str) -> tuple[Plan, Lines]:
+    """Every check for every folder, before anything is written. Returns (folder -> files, notes)."""
+    check_skills_dir(root)
+    new_names = folder_names(new, strict=True)
+    old_names = folder_names(old, strict=False)
+    plan: Plan = {}
+    notes: list[str] = []
+    branch = BRANCH_PREFIX + to_tag
+    for name in new_names:
+        folder = skill_dir(name)
+        check_no_symlinks(root, folder)
+        present = exists_locally(root, name)
+        if name not in old_names:
+            if present:
+                raise Refuse(
+                    f"{folder} exists locally but {current} did not ship it, so it cannot be "
+                    "verified and apply will not overwrite it. On "
+                    f"{branch}: rename it if it is your own skill, or `git rm -r {folder}` if it "
+                    "is a hand copy (this includes a `sync-root-factory/` committed by the v0.8.0 "
+                    "bootstrap); commit; rerun apply"
+                )
+        elif not present:
+            notes.append(f"re-adding (absent locally): {name}")
+        else:
+            verify_local(root, old, current, [name])  # old and new only
+        plan[folder] = tag_files(new, folder)
+    for name in old_names:
+        if name not in new_names and exists_locally(root, name):
+            notes.append(f"no longer shipped by {to_tag}, left alone: {name}")
+    version = plan.get(FACTORY, {}).get(VERSION_FILE)
+    if version is not None and version.decode().strip() != to_tag[1:]:
+        raise Refuse(
+            f"{to_tag}'s {VERSION_FILE} says {version.decode().strip()!r}: "
+            "the release forgot to bump it; tell the maintainer"
+        )
+    tracked = set(local_tracked(root, SKILLS))
+    for files in plan.values():  # every path to write stays inside the repo and is committable
+        for rel in files:
+            if not (root / rel).resolve().is_relative_to(root.resolve()):
+                raise Refuse(f"{rel} would be written outside the repository")
+            if rel not in tracked and os.path.lexists(root / rel):
+                raise Refuse(f"{rel} exists locally but git does not track it; not writing over it")
+            if rel not in tracked and _is_ignored(root, rel):
+                raise Refuse(f"{rel} is gitignored: it would be written but never committed")
+    return plan, notes
+
+
+def apply_sync(
+    root: Path, source: str, to_tag: str, assume: str | None, notes: list[str] | None = None
+) -> list[str]:
     to = parse_tag(to_tag)
     dirty = dirty_entries(root)
     if dirty:
@@ -341,28 +460,15 @@ def apply_sync(root: Path, source: str, to_tag: str, assume: str | None) -> list
         raise Refuse("generated repos use `copier update`, not apply")
     if parse_tag(current) >= to:
         raise Refuse(f"already on {current}; {to_tag} is not newer")
-    for folder in TARGETS:  # every target, whether or not the old tag has it
-        check_no_symlinks(root, folder)
     with tempfile.TemporaryDirectory() as tmp:
         old, new = Path(tmp) / "old", Path(tmp) / "new"
         fetch_tag(current, old, source)
-        verify_local(root, old, current)
         fetch_tag(to_tag, new, source)
-        plan = {f: tag_files(new, f) for f in TARGETS}
-        new_version = plan[FACTORY].get(VERSION_FILE)
-        if new_version is not None and new_version.decode().strip() != to_tag[1:]:
-            raise Refuse(
-                f"{to_tag}'s {VERSION_FILE} says {new_version.decode().strip()!r}: "
-                "the release forgot to bump it; tell the maintainer"
-            )
-        for folder, files in plan.items():  # every path to write stays inside the repo
-            for rel in files:
-                if not (root / rel).resolve().is_relative_to(root.resolve()):
-                    raise Refuse(f"{rel} would be written outside the repository")
+        plan, found = plan_apply(root, old, new, current, to_tag)
+        if notes is not None:
+            notes += found
         written = []
         for folder, files in plan.items():
-            if not files:
-                continue
             for rel in local_tracked(root, folder):
                 if rel == VERSION_FILE and VERSION_FILE not in files:
                     continue
@@ -377,22 +483,20 @@ def apply_sync(root: Path, source: str, to_tag: str, assume: str | None) -> list
             for d in sorted((p for p in (root / folder).rglob("*") if p.is_dir()), reverse=True):
                 if not any(d.iterdir()):
                     d.rmdir()
-        bad = post_diff(root, new)
+        bad = post_diff(root, new, list(plan))
     if bad:
         raise Refuse(
             "diff -rq after apply failed. Files were written; undo with "
-            f"`git restore .` and `git clean -fd -- {FACTORY} {SYNC_DIR}`:\n  " + "\n  ".join(bad)
+            f"`git restore .` and `git clean -fd -- {' '.join(plan)}`:\n  " + "\n  ".join(bad)
         )
     return sorted(written)
 
 
-def post_diff(root: Path, tree: Path) -> list[str]:
+def post_diff(root: Path, tree: Path, folders: list[str]) -> list[str]:
     """Filesystem vs the tag's copy, ignoring gitignored entries (e.g. __pycache__)."""
     bad = []
-    for folder in TARGETS:
+    for folder in folders:
         want = tag_files(tree, folder)
-        if not want:
-            continue
         have = {}
         for p in (root / folder).rglob("*"):
             rel = p.relative_to(root).as_posix()
@@ -403,6 +507,66 @@ def post_diff(root: Path, tree: Path) -> list[str]:
         bad += [f"differs: {r}" for r, data in want.items() if have.get(r) != data]
         bad += [f"extra: {r}" for r in have if r not in want]
     return bad
+
+
+def answer_value(text: str | None, key: str) -> str | None:
+    """A top-level `key: value` from .copier-answers.yml: quotes and a trailing comment dropped."""
+    if text is None or len(re.findall(rf"^{re.escape(key)}:", text, re.MULTILINE)) != 1:
+        return None  # absent, or repeated: Copier keeps the LAST one, so no first match is safe
+    m = re.search(rf"^{re.escape(key)}:[ \t]*(.*)$", text, re.MULTILINE)
+    if not m:
+        return None
+    v = m[1].strip()
+    if v[:1] in ("'", '"'):
+        end = v.find(v[0], 1)
+        return v[1:end] if end > 0 else None
+    return re.split(r"\s+#", v, maxsplit=1)[0].strip()
+
+
+def src_path_ok(read) -> bool:
+    v = answer_value(read(".copier-answers.yml"), "_src_path")
+    if not v:
+        return False
+    v = v.removesuffix("/").removesuffix(".git")  # once each, as in the URLs Copier builds
+    # the scheme or alias is case-sensitive, as in Copier (`GH:` would be a local path); the
+    # owner/repo part is not
+    for ok in SRC_OK:
+        prefix = ok[: -len(REPO)]
+        if v.startswith(prefix) and v[len(prefix) :].lower() == REPO.lower():
+            return True
+    return False
+
+
+def copier_check(root: Path, tag: str, source: str) -> None:
+    """Before `copier update`: a release tag that is annotated, a `_commit` that exists upstream
+    and a `_src_path` that is the GitHub template (not a local clone or a fork)."""
+    parse_tag(tag)
+    read = tree_reader(root)
+    if read(".copier-answers.yml") is None:
+        raise Refuse("no .copier-answers.yml: this is not a generated repo")
+    text = read(".copier-answers.yml") or ""
+    for key in ("_src_path", "_commit"):
+        if len(re.findall(rf"^{key}:", text, re.MULTILINE)) > 1:
+            raise Refuse(
+                f"{key} appears more than once in .copier-answers.yml; Copier keeps the last one. "
+                f"Edit the existing {key} line in place (replace it; never add a second line), "
+                "commit, and rerun this check"
+            )
+    commit = answer_value(text, "_commit") or ""
+    if not TAG_RE.match(commit):
+        raise Refuse(
+            f"_commit {commit!r} is not a release tag (vX.Y.Z); copier cannot rebuild the old "
+            "version from the template. Report it as-is and ask the maintainer"
+        )
+    if not src_path_ok(read):
+        src = answer_value(read(".copier-answers.yml"), "_src_path")
+        raise Refuse(
+            f"_src_path {src!r} is not {REPO} on GitHub (a local clone or a fork?). On "
+            f"{BRANCH_PREFIX}{tag}: replace the existing `_src_path` line in .copier-answers.yml with `_src_path: gh:{REPO}` (edit it, do not add a second line), commit "
+            f"(copier update refuses a dirty tree), run this check again, then "
+            f"`copier update --vcs-ref {tag} --defaults --conflict inline`"
+        )
+    check_annotated(tag, source)
 
 
 # --- branch, push, markers, labels, changelog ----------------------------------------------
@@ -421,13 +585,16 @@ def compute_status(root: Path, source: str, assume: str | None) -> dict:
     base = f"origin/{default_branch(root)}"
     kind, current = current_version(ref_reader(root, base), assume)
     latest = latest_tag(source)
-    return {
+    out = {
         "kind": kind,
         "current": current,
         "latest": latest,
         "base": base,
         "state": compare_versions(current, latest),
     }
+    if kind == "generated":
+        out["src_ok"] = src_path_ok(ref_reader(root, base))
+    return out
 
 
 def create_branch(root: Path, tag: str) -> str:
@@ -505,6 +672,12 @@ def plan_labels(missing: Lines, shadowing: bool) -> tuple[Lines, Lines]:
     )
 
 
+def label_lines(to_create: Lines, skipped: Lines) -> Lines:
+    """What `labels` prints: never nothing, so an empty result is not mistaken for a failure."""
+    lines = list(to_create) if to_create else ["none missing"]
+    return lines + [f"skipped (Actions-only label, not needed by the skill): {n}" for n in skipped]
+
+
 def changelog_entries(text: str, frm: str, to: str) -> list[str]:
     lo, hi = parse_tag(frm), parse_tag(to)
     entries: list[Entry] = []
@@ -557,11 +730,22 @@ def run(args: argparse.Namespace) -> int:
         _, current = current_version(tree_reader(root), args.assume_tag)
         with tempfile.TemporaryDirectory() as tmp:
             fetch_tag(current, Path(tmp) / "t", args.source)
-            verify_local(root, Path(tmp) / "t", current)
+            tree = Path(tmp) / "t"
+            verify_local(root, tree, current)
+            names = folder_names(tree, strict=False)
+            for name in names:
+                if not exists_locally(root, name):
+                    print(f"would re-add (absent locally): {name}")
         print(f"ok: the skill folders match {current}")
     elif cmd == "apply":
         preflight(root)
-        for rel in apply_sync(root, args.source, args.to_tag, args.assume_tag):
+        notes: list[str] = []
+        try:
+            written = apply_sync(root, args.source, args.to_tag, args.assume_tag, notes)
+        finally:
+            for note in notes:
+                print(note)
+        for rel in written:
             print(rel)
     elif cmd == "changelog":
         with tempfile.TemporaryDirectory() as tmp:
@@ -614,9 +798,13 @@ def run(args: argparse.Namespace) -> int:
                         f"created so far: {created or 'none'}"
                     )
                 created.append(name)
-            print(name)
-        for name in skipped:
-            print(f"skipped (Actions-only label, not needed by the skill): {name}")
+        for line in label_lines(to_create, skipped):
+            print(line)
+    elif cmd == "copier-check":
+        if preflight(root)["kind"] != "generated":
+            raise Refuse("copier-check is for generated repos")
+        copier_check(root, args.tag, args.source)
+        print(f"ok: {args.tag} is annotated, _commit is a release tag, _src_path is {REPO}")
     elif cmd == "check-markers":
         hits = find_markers(root)
         if hits:
@@ -640,6 +828,7 @@ def main(argv: list[str] | None = None) -> int:
         sub.add_parser(name).add_argument("--assume-tag")
     sub.add_parser("branch").add_argument("tag")
     sub.add_parser("push").add_argument("tag")
+    sub.add_parser("copier-check").add_argument("tag")
     ap = sub.add_parser("apply")
     ap.add_argument("--to-tag", required=True)
     ap.add_argument("--assume-tag")
@@ -686,7 +875,13 @@ def _snap(root: Path) -> dict:
     return out
 
 
-def _tpl(version: str, skill_text: str, with_version: bool, with_sync: bool) -> dict[str, str]:
+def _tpl(
+    version: str,
+    skill_text: str,
+    with_version: bool,
+    with_sync: bool,
+    folders: dict[str, str] | None = None,
+) -> dict[str, str]:
     files = {
         f"template/{SKILL}/SKILL.md": skill_text,
         f"template/{SKILL}/scripts/x.py": f"print('x {version}')\n",
@@ -701,6 +896,8 @@ def _tpl(version: str, skill_text: str, with_version: bool, with_sync: bool) -> 
         files[f"template/{SKILL}/VERSION"] = f"{version}\n"
     if with_sync:
         files[f"template/{SYNCF}/SKILL.md"] = f"sync {version}\n"
+    for name, text in (folders or {}).items():  # more skill folders, same fixture
+        files[f"template/{SKILLS}/{name}/SKILL.md"] = text
     return files
 
 
@@ -942,7 +1139,7 @@ def _self_test(tmp: Path) -> None:
     assert (down / ".claude/commands/keep.md").read_bytes() == sentinel
     assert (down / "CLAUDE.md").read_bytes() == claude_md
     assert (down / SKILL / "scripts/__pycache__/x.pyc").exists()
-    assert post_diff(down, t2) == []
+    assert post_diff(down, t2, [SKILL, SYNCF]) == []
     assert (down / SKILL / "VERSION").read_text() == "0.2.0\n"
     assert (down / SKILL / "SKILL.md").read_text() == "skill 0.2.0\n"
 
@@ -962,6 +1159,238 @@ def _self_test(tmp: Path) -> None:
     entries = changelog_entries((t2 / "CHANGELOG.md").read_text(), "v0.1.0", "v0.2.0")
     assert len(entries) == 1 and "sub 0.2.0" in entries[0] and "pending" not in entries[0]
     assert changelog_entries((t2 / "CHANGELOG.md").read_text(), "v0.2.0", "v0.2.0") == []
+    _self_test_folders(tmp, g, commit_all)
+
+
+def _self_test_folders(tmp: Path, g, commit_all) -> None:
+    """#50: apply syncs every skill folder the tag ships; #48: copier-check."""
+    m = tmp / "multi"
+    m.mkdir()
+    g(m, "init", "-q", "-b", "main")
+    tags = {
+        # v0.1.0: factory, factory-lesson and a skill v0.2.0 drops
+        "0.1.0": {"factory-lesson": "lesson 0.1.0\n", "dropped": "dropped 0.1.0\n"},
+        "0.2.0": {
+            "factory-lesson": "lesson 0.2.0\n",
+            "new-skill": "new 0.2.0\n",
+            "zz-new": "zz 0.2.0\n",
+        },
+        "0.3.0": {"factory-lesson": "lesson 0.3.0\n", "Bad_Name": "x\n"},
+        "0.5.0": {"factory-lesson": "lesson 0.5.0\n"},
+    }
+    for ver, extra in tags.items():
+        shutil.rmtree(m / "template", ignore_errors=True)
+        for rel, text in _tpl(ver, f"skill {ver}\n", ver != "0.1.0", False, extra).items():
+            _w(m, rel, text)
+        if ver == "0.5.0":
+            _w(m, f"template/{SKILL}/Local.md", "tpl\n")
+        if ver == "0.2.0":  # a plain file directly under skills/ is never written downstream
+            _w(m, f"template/{SKILLS}/README.md", "not a folder\n")
+        commit_all(m, ver)
+        g(m, "tag", "-a", f"v{ver}", "-m", f"v{ver}")
+    g(m, "tag", "v0.4.0")  # lightweight
+    mbare = tmp / "multi.git"
+    g(tmp, "clone", "-q", "--bare", str(m), str(mbare))
+    msrc = str(mbare)
+
+    def down_at(name: str, to: str, extra: dict[str, str] | None = None, ignore: str = "") -> Path:
+        """A shadowing repo holding v0.1.0's skills (+ extra files), on local/adopt-<to>."""
+        o = tmp / f"{name}-origin.git"
+        g(tmp, "init", "-q", "--bare", "-b", "main", str(o))
+        d = tmp / name
+        g(tmp, "clone", "-q", str(o), str(d))
+        g(d, "checkout", "-q", "-b", "main")
+        for rel, text in _tpl("0.1.0", "skill 0.1.0\n", False, False, tags["0.1.0"]).items():
+            if rel.startswith("template/"):
+                _w(d, rel[len("template/") :], text)
+        _w(d, ".gitignore", "__pycache__/\n" + ignore)
+        _w(d, ".claude/skills/my-own/SKILL.md", "my own skill\n")
+        for rel, text in (extra or {}).items():
+            _w(d, rel, text)
+        commit_all(d, "downstream")
+        g(d, "push", "-q", "-u", "origin", "main")
+        create_branch(d, to)
+        return d
+
+    def refused_unchanged(d: Path, to: str, want: str) -> None:
+        before = _snap(d)
+        assert want in _refuses(apply_sync, d, msrc, to, "v0.1.0")
+        assert _snap(d) == before, "a refused apply must leave every folder unchanged"
+
+    # names and "exists" come from the filesystem
+    assert folder_names(tmp / "nowhere", strict=True) == []
+    probe = tmp / "probe"
+    (probe / SKILLS).mkdir(parents=True)
+    assert not exists_locally(probe, "x-skill")
+    (probe / SKILLS / "x-skill").symlink_to(tmp / "no-such-target")  # dangling
+    assert exists_locally(probe, "x-skill")
+    (probe / SKILLS / "Case-Skill").mkdir()
+    assert exists_locally(probe, "case-skill")
+    real_lexists = os.path.lexists  # a case-sensitive filesystem must give the same answer
+    os.path.lexists = lambda _p: False  # type: ignore[assignment]
+    try:
+        assert exists_locally(probe, "case-skill") and not exists_locally(probe, "other")
+    finally:
+        os.path.lexists = real_lexists
+
+    # the pensieve case: a tracked hand copy of a folder the OLD tag ships. Replaced after verify;
+    # new folders added; the user's own skill untouched; a folder v0.2.0 drops left alone (even
+    # modified); a plain file under skills/ ignored.
+    d = down_at("real", "v0.2.0")
+    _w(d, f"{SKILLS}/dropped/SKILL.md", "dropped, edited locally\n")
+    commit_all(d, "edit the folder v0.2.0 drops")
+    own = (d / SKILLS / "my-own/SKILL.md").read_bytes()
+    dropped = (d / SKILLS / "dropped/SKILL.md").read_bytes()
+    notes: list[str] = []
+    written = apply_sync(d, msrc, "v0.2.0", "v0.1.0", notes)
+    assert f"{SKILLS}/new-skill/SKILL.md" in written and f"{SKILLS}/zz-new/SKILL.md" in written
+    assert (d / SKILLS / "factory-lesson/SKILL.md").read_text() == "lesson 0.2.0\n"
+    assert (d / SKILL / "VERSION").read_text() == "0.2.0\n"
+    assert (d / SKILLS / "my-own/SKILL.md").read_bytes() == own
+    assert (d / SKILLS / "dropped/SKILL.md").read_bytes() == dropped
+    assert not (d / SKILLS / "README.md").exists()
+    assert any("no longer shipped by v0.2.0, left alone: dropped" in n for n in notes)
+
+    # old tag lacked it, it exists locally: refused, whatever it is, and `factory/` (sorts first)
+    # is still unchanged because every folder is checked before the first write
+    d = down_at("lack1", "v0.2.0", {f"{SKILLS}/zz-new/SKILL.md": "mine\n"})
+    refused_unchanged(d, "v0.2.0", "did not ship it")
+    d = down_at("lack2", "v0.2.0")
+    _w(d, f"{SKILLS}/zz-new/SKILL.md", "untracked\n")
+    (d / ".gitignore").write_text("__pycache__/\n.claude/skills/zz-new/\n")
+    commit_all(d, "ignore it")  # now zz-new is gitignored and untracked
+    assert dirty_entries(d) == []
+    refused_unchanged(d, "v0.2.0", "did not ship it")
+    d = down_at("lack3", "v0.2.0", {f"{SKILLS}/ZZ-New/SKILL.md": "case variant\n"})
+    refused_unchanged(d, "v0.2.0", "did not ship it")
+    d = down_at("lack4", "v0.2.0", ignore=f"{SKILLS}/zz-new\n")
+    (d / SKILLS / "zz-new").symlink_to(tmp / "no-such-target")  # ignored dangling symlink
+    assert dirty_entries(d) == []
+    refused_unchanged(d, "v0.2.0", "symlink")
+    d = down_at("lack5", "v0.2.0", ignore=f"{SKILLS}/new-skill/\n")
+    refused_unchanged(d, "v0.2.0", "gitignored")  # would be written but never committed
+
+    # old tag had it: modified or partly deleted refuses; wholly absent is re-added and said so
+    d = down_at("mod", "v0.2.0")
+    _w(d, f"{SKILLS}/factory-lesson/SKILL.md", "edited\n")
+    commit_all(d, "edit")
+    refused_unchanged(d, "v0.2.0", "modified")
+    d = down_at("part", "v0.2.0", {f"{SKILLS}/factory-lesson/extra.md": "e\n"})
+    g(d, "rm", "-q", f"{SKILLS}/factory-lesson/SKILL.md")
+    g(d, "commit", "-q", "-m", "partly delete")
+    refused_unchanged(d, "v0.2.0", "missing locally")
+    d = down_at("gone", "v0.2.0")
+    g(d, "rm", "-q", "-r", f"{SKILLS}/factory-lesson")
+    g(d, "commit", "-q", "-m", "delete the folder")
+    t1m = tmp / "t1m"
+    fetch_tag("v0.1.0", t1m, msrc)
+    assert not any("factory-lesson" in x for x in differences(d, t1m))  # absent: nothing to compare
+    notes = []
+    apply_sync(d, msrc, "v0.2.0", "v0.1.0", notes)
+    assert "re-adding (absent locally): factory-lesson" in notes
+    assert (d / SKILLS / "factory-lesson/SKILL.md").read_text() == "lesson 0.2.0\n"
+
+    # never write over a path git does not track, even when the gitignore check is fooled
+    # (core.ignorecase=false on a case-insensitive filesystem): isolate the lexists guard
+    d = down_at("untracked", "v0.5.0", ignore=f"{SKILL}/Local.md\n")
+    _w(d, f"{SKILL}/Local.md", "PRECIOUS\n")
+    assert dirty_entries(d) == []
+    real_ignored = globals()["_is_ignored"]
+    globals()["_is_ignored"] = lambda _r, _p: False
+    try:
+        refused_unchanged(d, "v0.5.0", "does not track")
+    finally:
+        globals()["_is_ignored"] = real_ignored
+    assert (d / SKILL / "Local.md").read_text() == "PRECIOUS\n"
+
+    # `.claude/skills` is a regular file: a refusal, not a traceback
+    d = down_at("skillsfile", "v0.2.0")
+    g(d, "rm", "-q", "-r", SKILLS)
+    _w(d, SKILLS, "i am a file\n")
+    commit_all(d, "skills is a file")
+    refused_unchanged(d, "v0.2.0", "is a file")
+
+    # a tag with no skill folders is no basis for "ok"
+    t0 = tmp / "t0"
+    _w(t0, "CHANGELOG.md", "- v0.0.5 (d): first\n")
+    d = down_at("vacuous", "v0.2.0")
+    assert "nothing to compare" in _refuses(verify_local, d, t0, "v0.0.5")
+
+    # a tag with an unsafe folder name refuses everything
+    d = down_at("badname", "v0.3.0")
+    refused_unchanged(d, "v0.3.0", "unsafe names")
+
+    # labels: never silent
+    assert label_lines([], []) == ["none missing"]
+    assert label_lines([], ["factory:design"]) == [
+        "none missing",
+        "skipped (Actions-only label, not needed by the skill): factory:design",
+    ]
+    assert label_lines(["P0"], []) == ["P0"]
+
+    # copier-check (#48)
+    def answers(src: str | None, commit: str = "v0.1.0") -> str:
+        return (f"_src_path: {src}\n" if src is not None else "") + f"_commit: {commit}\n"
+
+    def ok(text: str) -> bool:
+        return src_path_ok(lambda p: text if p == ".copier-answers.yml" else None)
+
+    for good in (
+        f"gh:{REPO}",
+        f"'gh:{REPO}'",
+        f'"https://github.com/{REPO}.git"',
+        f"https://github.com/{REPO}/",
+        f"git@github.com:{REPO}.git",
+        f"ssh://git@github.com/{REPO}.git/",
+        f"gh:{REPO.upper()} # a comment",
+    ):
+        assert ok(answers(good)), good
+    for bad in (
+        "/Users/me/agent-factory",
+        "../agent-factory",
+        f"file:///tmp/{REPO}",
+        f"https://gitlab.com/{REPO}",
+        f"git+https://github.com/{REPO}",
+        "gh:someone-else/agent-factory",
+        f"gh:{REPO}-fork",
+        f"https://evilgithub.com/{REPO}",
+        "",
+    ):
+        assert not ok(answers(bad)), bad
+    assert not ok(answers(None)) and not ok("")
+    for bad in (  # the scheme and alias are case-sensitive in Copier; `.git` and `/` strip once
+        f"GH:{REPO}",
+        f"HTTPS://GITHUB.COM/{REPO}",
+        f"gh:{REPO}.git.git",
+        f"https://github.com/{REPO}/.git",
+        f"gh:{REPO}//",
+    ):
+        assert not ok(answers(bad)), bad
+    assert ok(answers(f"gh:{REPO.upper()}.git/"))  # the owner/repo part is case-insensitive
+    # a repeated key: Copier keeps the LAST, so the first match proves nothing
+    dup_good_first = answers(f"gh:{REPO}") + "_src_path: /Users/me/agent-factory-clone\n"
+    dup_bad_first = "_src_path: /Users/me/agent-factory-clone\n" + answers(f"gh:{REPO}")
+    assert not ok(dup_good_first) and not ok(dup_bad_first)
+    gen = tmp / "gen"
+    gen.mkdir()
+    g(gen, "init", "-q", "-b", "main")
+    _w(gen, "README.md", "x\n")
+    _w(gen, ".copier-answers.yml", answers(f"gh:{REPO}"))
+    commit_all(gen, "gen")
+    copier_check(gen, "v0.2.0", msrc)
+    _refuses(copier_check, gen, "v0.2", msrc)  # not vX.Y.Z
+    _refuses(copier_check, gen, "v0.4.0", msrc)  # lightweight tag
+    _refuses(copier_check, gen, "v9.9.9", msrc)  # no such tag
+    _w(gen, ".copier-answers.yml", answers(f"gh:{REPO}", "v0.1.0-3-gabc123"))
+    assert "release tag" in _refuses(copier_check, gen, "v0.2.0", msrc)  # describe string
+    _w(gen, ".copier-answers.yml", answers(str(tmp / "agent-factory-clone")))
+    assert "_src_path" in _refuses(copier_check, gen, "v0.2.0", msrc)
+    _w(gen, ".copier-answers.yml", answers(None))
+    _refuses(copier_check, gen, "v0.2.0", msrc)
+    for dup in (dup_good_first, dup_bad_first, answers(f"gh:{REPO}") + "_commit: v0.1.0\n"):
+        _w(gen, ".copier-answers.yml", dup)
+        msg = _refuses(copier_check, gen, "v0.2.0", msrc)
+        assert "more than once" in msg and "replace it" in msg
 
 
 if __name__ == "__main__":
