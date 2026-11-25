@@ -12,6 +12,7 @@ from typing import Any, ClassVar
 import pytest
 
 from pensieve_traces import cli, upload
+from pensieve_traces._version import install_command
 
 
 class FakeApi:
@@ -183,7 +184,9 @@ def test_missing_hub_extra(tmp_path: Path, monkeypatch, capsys) -> None:
     monkeypatch.setitem(sys.modules, "huggingface_hub", None)
     write(tmp_path / "a.jsonl")
     assert up(tmp_path, "--yes") == 1
-    assert "pensieve-traces[hub]" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert install_command("hub") in err
+    assert "git+https://github.com/rahmansunny071/pensieve-traces" in err
 
 
 def test_hub_error_reported_without_traceback(

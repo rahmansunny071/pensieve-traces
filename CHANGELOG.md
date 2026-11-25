@@ -4,6 +4,7 @@
 
 ## 0.1.0 (2026-11-25)
 
+- Installs come from GitHub, pinned to the release tag; the package is not on PyPI; `__version__` reads the installed version; install hints point at GitHub (#86).
 - Repository scaffold and agent factory (CLAUDE.md, factory commands, workflows, CI).
 - Canonical session model (`Session`, `Message`, `ToolCall`, `Usage`, `Role`) with lossless JSON round-trip (#1).
 - Claude Code reader (`read_session`, `read_project`) from raw session JSONL to the canonical `Session` (#2).

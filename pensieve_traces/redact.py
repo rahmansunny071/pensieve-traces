@@ -1,7 +1,7 @@
 """Redaction pass for canonical sessions, built on teich's ``TraceAnonymizer``.
 
-``teich`` is an optional dependency (``pip install "pensieve-traces[redact]"``) and is imported
-lazily. Every writer must obtain its session through :func:`prepare_for_output`, which redacts
+``teich`` is an optional dependency (the ``redact`` extra, installed from GitHub, not PyPI) and is
+imported lazily. Every writer must obtain its session through :func:`prepare_for_output`, which redacts
 by default, warns when redaction is disabled and never falls back to unredacted output when
 redaction cannot run.
 
@@ -20,11 +20,11 @@ import warnings
 from pathlib import PurePosixPath
 from typing import Any, Protocol
 
+from pensieve_traces._version import install_command
 from pensieve_traces.model import Session
 
 __all__ = ["Anonymizer", "RedactionUnavailableError", "prepare_for_output", "redact_session"]
 
-_INSTALL_HINT = 'Redaction needs the optional dependency: pip install "pensieve-traces[redact]"'
 _DISABLED_WARNING = "Redaction disabled: output may contain secrets, emails and local paths."
 
 
@@ -44,7 +44,9 @@ def _default_anonymizer() -> Anonymizer:
     try:
         from teich.anonymize import TraceAnonymizer
     except ImportError as exc:
-        raise RedactionUnavailableError(_INSTALL_HINT) from exc
+        raise RedactionUnavailableError(
+            f"Redaction needs the optional dependency: {install_command('redact')}"
+        ) from exc
     return TraceAnonymizer()
 
 

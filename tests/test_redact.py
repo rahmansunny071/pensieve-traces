@@ -20,6 +20,7 @@ from pensieve_traces import (
     prepare_for_output,
     redact_session,
 )
+from pensieve_traces._version import install_command
 
 FIXTURE = Path(__file__).parent / "fixtures" / "redact" / "secrets_session.json"
 
@@ -212,7 +213,8 @@ def test_missing_teich_raises_with_hint_and_cause(monkeypatch):
     monkeypatch.setitem(sys.modules, "teich.anonymize", None)
     with pytest.raises(RedactionUnavailableError) as info:
         redact_session(load_session())
-    assert 'pip install "pensieve-traces[redact]"' in str(info.value)
+    assert install_command("redact") in str(info.value)
+    assert "git+https://github.com/rahmansunny071/pensieve-traces" in str(info.value)
     assert isinstance(info.value, ImportError)
     assert isinstance(info.value.__cause__, ImportError)
 
