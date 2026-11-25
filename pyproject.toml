@@ -19,6 +19,8 @@ pensieve-traces = "pensieve_traces.cli:main"
 [project.urls]
 Homepage = "https://sajjadur.net/"
 Repository = "https://github.com/rahmansunny071/pensieve-traces"
+Documentation = "https://rahmansunny071.github.io/pensieve-traces/"
+Changelog = "https://rahmansunny071.github.io/pensieve-traces/reference/changelog/"
 
 [build-system]
 requires = ["hatchling"]
