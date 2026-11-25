@@ -8,7 +8,7 @@ redaction cannot run.
 teich 0.3.8 leaves an email address unredacted when a period follows it directly (``mail a@b.invalid.``);
 :class:`_EmailPeriodGuard` closes that gap before teich runs, with the same placeholder as the bare
 address. Redaction is best-effort pattern matching: review anything before you publish it. It was tuned
-on coding sessions and misses much chat personal data (see the README "Redaction" table).
+on coding sessions and misses much chat personal data (see the docs page "Redaction and privacy", docs/concepts/redaction.md).
 """
 
 from __future__ import annotations

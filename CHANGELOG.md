@@ -22,3 +22,4 @@
 - Unreleased: README: the ConvoMem dataset row says local-folder runs need convomem-arena#18, and the factory intro matches opt-in merges by the `factory` skill (#74).
 - Unreleased: README: ConvoMem conversations no longer claim convomem-arena loads them from a local folder today (needs convomem-arena#18) (#77).
 - Unreleased: README: new "Letting the factory merge for you" subsection (the heading the `factory` skill points to) holds the opt-in merge permission rule (#79).
+- Unreleased: Documentation site at https://rahmansunny071.github.io/pensieve-traces/ (MkDocs Material: `mkdocs.yml`, `docs/`, `overrides/`), published to `gh-pages` by the new `.github/workflows/docs.yml`; new optional `docs` extra (`mkdocs-material`); the README is now a landing page with a quick start, and the sections that moved are on the site (#81).

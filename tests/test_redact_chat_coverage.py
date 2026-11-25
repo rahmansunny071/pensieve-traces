@@ -3,7 +3,7 @@ personal data (needs the `redact` extra).
 
 A kind counts as replaced when its exact value is gone from that message's redacted text. The
 expectation is measured with teich 0.3.8 (the version ``uv.lock`` pins); a teich upgrade that
-changes coverage fails this test, and the README "Redaction" table must change with it.
+changes coverage fails this test, and docs/concepts/redaction.md (the Redaction table) must change with it.
 """
 
 from __future__ import annotations
