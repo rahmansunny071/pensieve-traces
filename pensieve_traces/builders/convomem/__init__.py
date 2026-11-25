@@ -1,5 +1,7 @@
 """ConvoMem dataset builder: step 1 finds candidate memory facts in conversations, step 2 turns
-them into evidence items (question, answer, evidence) for the six ConvoMem categories."""
+them into evidence items (question, answer, evidence) for the six ConvoMem categories, step 3
+(``dataset`` and ``topics``, driven by ``pensieve-traces build convomem``) writes the dataset
+layout convomem-arena reads."""
 
 from pensieve_traces.builders.convomem.extract import (
     CACHE_FORMAT_VERSION,
