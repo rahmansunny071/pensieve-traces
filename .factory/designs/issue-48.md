@@ -53,3 +53,10 @@ None. (Gaps shown by measurement: file follow-ups for an LLM PII pass; out of sc
 
 ## Size estimate
 S
+
+## Implementation notes
+
+- Built in PR #63: `upload.count_harness` (shared `_read_header`, first line only, exact `harness` match, odd files count 0) and a stderr warning in `cli._upload` after the summary and before the confirm/`--yes` branch; it never refuses. Coverage is pinned in `tests/test_redact_chat_coverage.py` over `tests/fixtures/redact/chat_pii_session.json` (teich 0.3.8, runs only in the redact CI job).
+- Design review (6055546156): corrected measurement (some phones are caught), reserved `.invalid` email and other clearly fictional values, claims limited to the measured table.
+- Code review (6059236668): address and SSN coverage depend on phrasing/format; rows split (`address_after_i_live_at` yes, `address_send_it_to` no; dashed SSN yes, undashed no) and the warning now says redaction "catches only some addresses and phone numbers" (1367921, verified).
+- Follow-up: closing the measured gaps (LLM PII pass, review step, or extra patterns) → #66.
