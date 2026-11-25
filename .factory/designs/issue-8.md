@@ -39,3 +39,11 @@ Offline: scripted fake `ChatClient`, fake opener. Client: URL, model, headers, b
 
 ## Size estimate
 M
+
+## Implementation notes
+
+- Built as planned in `pensieve_traces/builders/llm.py` (`ChatClient`, `OpenAICompatibleClient`, `ModelClientError`) and `pensieve_traces/builders/convomem/extract.py` (`extract_candidates`, `Candidate`, `ExtractStats`, `prompt_hashes`, `CACHE_FORMAT_VERSION`), stdlib only, PR #57. Prompts in `builders/convomem/prompts/` with the `=====PROMPT=====` header delimiter; the Apache-2.0 text ships next to them, `NOTICE` at the root.
+- Design review (6055151329) changes: API key as an unredirected header; tolerant reply parsing (`<think>`, code fence, bare list or one-list object); cache rules (own `<sha256>.json` files only, atomic writes, corrupt entry = miss, key on the exact rendered request + model + format version); Apache-2.0 §4 attribution.
+- Deviation: the system prompt file is `extract_system.txt` (the plan first said `extract_facts.txt`).
+- Code review (6055262304): 2 blockers fixed in f431729 and verified: a key with a trailing CR/LF leaked into a traceback (now stripped; control characters raise `ModelClientError` naming only the variable; opener `ValueError`/`HTTPException` wrapped `from None`); the design file disagreed with the code. "Nothing usable" for #55 is `failed_windows + dropped_bad_json == windows`.
+- Follow-ups: crafted failures that still escape a window, and duplicate session ids in the input → #59 (#55's loader should dedupe).
