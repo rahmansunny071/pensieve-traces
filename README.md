@@ -220,13 +220,13 @@ Two companion skills ship with it. **`sync-root-factory`** (`.claude/skills/sync
 
 ### Letting the factory merge for you
 
-Add this [permission rule](https://code.claude.com/docs/en/permissions) to `.claude/settings.local.json`, `.claude/settings.json` or `~/.claude/settings.json` yourself. It lets the `factory` skill run its merge command, which uses your ruleset bypass (`--admin`) because a PR's author can't approve their own PR, so the repo doesn't ship it:
+Add this [permission rule](https://code.claude.com/docs/en/permissions) yourself, to `.claude/settings.local.json` (keep it out of git) or `~/.claude/settings.json`, not to the committed `.claude/settings.json`. It lets the `factory` skill run its merge command with your ruleset bypass (`--admin`), which it needs because a PR's author can't approve their own PR. Because it hands an agent your bypass, the repo doesn't ship it:
 
 ```json
 { "permissions": { "allow": ["Bash(gh pr merge * --merge --admin --delete-branch)"] } }
 ```
 
-The rule matches only commands that end in `--delete-branch`, which is how the skill runs the merge; the skill still merges only when every gate passes, and never works around a refused merge.
+The rule matches only commands that start with `gh pr merge` and end in exactly `--merge --admin --delete-branch`, which is how the skill runs the merge (a trailing `-R` isn't covered). The skill still merges only when every gate passes, and never works around a refused merge.
 
 ## Development
 
