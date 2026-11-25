@@ -14,6 +14,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from pensieve_traces._version import install_command
+
 __all__ = [
     "HubUnavailableError",
     "UploadError",
@@ -23,8 +25,6 @@ __all__ = [
     "require_hub",
     "upload_files",
 ]
-
-_HINT = "uploading needs huggingface_hub; install it with: pip install 'pensieve-traces[hub]'"
 
 
 class HubUnavailableError(ImportError):
@@ -78,7 +78,9 @@ def _import_hub() -> Any:
     try:
         import huggingface_hub
     except ImportError as exc:
-        raise HubUnavailableError(_HINT) from exc
+        raise HubUnavailableError(
+            f"uploading needs huggingface_hub; install it with: {install_command('hub')}"
+        ) from exc
     return huggingface_hub
 
 

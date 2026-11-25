@@ -14,7 +14,7 @@ uv run --no-sync pytest -q
 ## This documentation
 
 ```bash
-uv sync --locked --extra dev --extra docs   # or: pip install "pensieve-traces[docs]"
+uv sync --locked --extra dev --extra docs   # or: pip install "pensieve-traces[docs] @ git+https://github.com/rahmansunny071/pensieve-traces@v0.1.0"
 uv run --no-sync mkdocs serve                # local preview
 uv run --no-sync mkdocs build --strict       # fails on any warning, such as a broken link
 ```

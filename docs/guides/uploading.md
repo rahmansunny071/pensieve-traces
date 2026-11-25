@@ -8,7 +8,7 @@ description: "Push converted STS traces to a private Hugging Face dataset."
 `pensieve-traces upload` pushes converted traces to a Hugging Face dataset, **private by default**. Uploading is always intentional: `upload` is the only command that contacts the Hub, and `convert` and every other command only write local files. It needs the optional extra and your own login (`hf auth login`); the tool never asks for, stores or prints a token.
 
 ```bash
-pip install "pensieve-traces[hub]"
+pip install "pensieve-traces[hub] @ git+https://github.com/rahmansunny071/pensieve-traces@v0.1.0"
 pensieve-traces upload traces/ --repo <user>/<dataset>   # private unless --public
 ```
 
