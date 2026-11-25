@@ -11,7 +11,7 @@ Rules:
 2. Each child is a known category folder (else "unknown category folder"); each grandchild is `<N>_evidence`, N an int in the category's range (else "evidence count N not allowed").
 3. Each `*.json` parses to `{"evidence_items": [...]}`.
 4. Each item: non-empty `question` and `answer` strings, non-empty `conversations`, `message_evidences` a list of length N (abstention: 1-3, as the issue says).
-4b. (added by the orchestrator) `len(message_evidences)` equals the number of the item's conversations with `containsEvidence: true`, and each evidence text is found in a different one of them (convomem-arena's `check_structure` flags this as error, and ConvoMem's `ConversationValidator` rejects it).
+4b. (added by the orchestrator) `len(message_evidences)` equals the number of the item's conversations with `containsEvidence: true`, and each evidence text is found in a different one of them (convomem-arena's `check_structure` flags a mismatch between the evidence count and the number of marked conversations as an error, and ConvoMem's `ConversationValidator` rejects it; matching each text to a different marked conversation is this repo's stricter rule).
 5. Each `message_evidences[].text` equals, verbatim, some message `text` in the item's conversations.
 6. `changing_evidence`: evidence texts occur in conversation order (conversation index strictly increasing).
 7. A same-named file exists in `core_benchmark/filler_conversations/` (else problem), has the filler layout, and holds no conversation id used as evidence by any item of any file with that name.
@@ -47,3 +47,5 @@ S/M
 - Distinctness (rule 4b) is a bipartite matching of evidence texts to the conversations marked `containsEvidence`; changing-evidence order is checked on those conversations, only when all texts are found.
 - The filler check is keyed on the file name: evidence ids of all evidence files named `X.json` must not appear in `filler_conversations/X.json`.
 - Tests generate the clean dataset in `tmp_path` with `dataset.write_dataset` (with topics keys), then edit JSON for each broken variant.
+
+- Code review (6059883417): READY. Verified on `build convomem` CLI output and a six-category dataset, both clean here and in convomem-arena's parsers and `check_structure`; every broken variant reported without a traceback; DIR unchanged. The orchestrator corrected the module docstring and rule 4b (they overstated what mirrors arena). Follow-ups (message/conversation shape keys, `01_evidence`, deep JSON, a check on real CLI output) → improvement issue.

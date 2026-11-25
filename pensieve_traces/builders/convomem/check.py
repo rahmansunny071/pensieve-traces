@@ -1,9 +1,13 @@
 """Structure check for a generated ConvoMem dataset (``pensieve-traces check-convomem``).
 
-Mirrors what convomem-arena reads (``EVIDENCE_ROOT``, ``FILLER_ROOT``, ``CATEGORIES`` and their
-evidence counts, ``parse_evidence_file``, ``parse_filler_file``) and its ``check_structure``
-rule that evidence comes from distinct conversations. Content checks (answer grounding,
-duplicates, filler contamination by words) stay in convomem-arena's data check.
+Checks the layout convomem-arena reads (``EVIDENCE_ROOT``, ``FILLER_ROOT``, ``CATEGORIES`` and
+their evidence counts; the top-level keys ``parse_evidence_file`` and ``parse_filler_file`` use).
+It does not check every key those parsers read (e.g. each message's ``speaker``). Its
+distinct-conversations rule is this repo's own, stricter than convomem-arena's
+``check_structure`` (which compares the evidence count with the number of conversations marked
+``containsEvidence``): here each evidence text must also be found in a different marked
+conversation. Content checks (answer grounding, duplicates, filler contamination by words) stay
+in convomem-arena's data check.
 
 Reads only the dataset directory and writes nothing. Content problems are returned as
 :class:`Problem` values, never raised. Problems name files, item indexes and reasons, never
