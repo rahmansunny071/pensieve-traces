@@ -2,6 +2,8 @@
 
 **Turn coding-agent session traces and claude.ai chat exports into shareable traces and memory datasets.**
 
+Docs: https://rahmansunny071.github.io/pensieve-traces/
+
 Claude Code (and other agents) record every session as raw JSONL. Those files hold far more than the conversation: file-history backups, full API request blobs, cost state and UI flags, plus whatever secrets, paths and private code passed through the session. claude.ai chats can be exported as a data export (`conversations.json`). pensieve-traces reads both into one canonical session model, redacts them, and writes:
 
 | Output | What it is | Status |
@@ -24,217 +26,28 @@ pi (later)  ─┘            timestamp, role, text,      ├─ ConvoMem conver
 
 > **Privacy.** Traces can contain prompts, tool output, local paths, secrets, private code and personal data. Redaction is on by default, but review anything before you publish it, and keep datasets private when unsure.
 
-## Redaction
-
-Install the optional extra to enable redaction: `pip install "pensieve-traces[redact]"` (uses [teich](https://pypi.org/project/teich/)'s `TraceAnonymizer`; the base install has no dependencies).
-
-```python
-from pensieve_traces import prepare_for_output, redact_session
-
-safe = prepare_for_output(session)  # redacts by default; raises if teich is missing
-raw = prepare_for_output(session, redact=False)  # explicit opt-out, emits a UserWarning
-copy = redact_session(session)  # scrubbed deep copy, input untouched
-```
-
-`build convomem` also redacts through `prepare_for_output`, once over all inputs, before any model call. Writers must obtain their session through `prepare_for_output`. It never falls back to unredacted output: without the extra it raises `RedactionUnavailableError`. Ids, tool names, timestamps and usage are left as is. Redaction is pattern-based and best-effort, so review output before sharing.
-
-**What redaction covers on chat content.** teich was tuned on coding sessions. Measured on `redact_session` (teich 0.3.8, the version `uv.lock` pins, plus a small pre-pass that also replaces an email address directly followed by a period) on a synthetic claude.ai-style chat (`tests/fixtures/redact/chat_pii_session.json`), pinned by `tests/test_redact_chat_coverage.py` so a teich upgrade that changes coverage shows up as a test change:
-
-| Kind | Replaced |
-|---|---|
-| email address, also when followed by `.`, `.)`, `."`, a curly quote, `!`, `?`, `:` or `;` | yes |
-| dashed SSN-style number (`987-65-4320`) | yes |
-| street address after "I live at" | yes |
-| 10-digit phone after a phrase like "Call me at" | yes |
-| undashed SSN-style number (`My SSN is 987654320.`) | no |
-| street address after other phrasing ("Send it to 42 Maple Lane, Springfield.") | no |
-| 7-digit phone after other phrasing ("My phone is 555-0143") | no |
-| IBAN | no |
-| card number | no |
-| person name | no |
-| health detail | no |
-| money amount | no |
-
-Not covered: an address followed by a period and then a letter, digit, `-`, `_`, `%` or `+` with no space (`name@host.invalid.I will`, `.5`, `.2024`, `.-x`), which teich also misses. Phone and address matching depends on the surrounding phrasing (teich 0.3.8 replaces an address only after phrases like "I live at" or "address:"; "My address is …", "Send it to …" and "Deliver to …" are left as is). Redaction does not catch chat personal data in general: review claude.ai traces before sharing them.
-
-## Canonical model
-
-`pensieve_traces.model` defines the harness-neutral dataclasses `Session`, `Message`, `ToolCall`, `Usage` and the `Role` enum (no extra dependencies). Timestamps are timezone-aware, tool arguments stay a raw JSON string, and `Session.to_json()` / `Session.from_json()` round-trip losslessly. The model holds raw text and does no redaction.
-
-```python
-from pathlib import Path
-
-from pensieve_traces import Session
-
-session = Session.from_json(Path("session.json").read_text())
-session.tool_result_for("call-1")
-```
-
-## Reading Claude Code sessions
-
-`pensieve_traces.readers.claude_code` turns raw Claude Code JSONL into canonical sessions (stdlib only). Only the conversation is kept: `user`, `assistant` and `system` records, plus the `ai-title` as `Session.title`. File backups, API request blobs, cost state and every other record type are skipped, and `toolUseResult` is never read.
-
-```python
-from pensieve_traces.readers.claude_code import read_project, read_session
-
-session = read_session("path/to/<session>.jsonl")
-sessions = read_project("path/to/project-dir")  # *.jsonl; subagent files merge into their session
-```
-
-Records sharing a `requestId` stay separate messages; token usage is attached only to the last one so sums are not double-counted. Malformed input raises `ClaudeCodeParseError` with the file path and line number. The reader does no redaction.
-
-## Reading claude.ai exports
-
-`pensieve_traces.readers.claude_ai` turns a claude.ai data export (Settings, Privacy, Export data) into canonical sessions, one per conversation (stdlib only). It reads only `conversations.json`; the account block, memories, projects, artifacts, `light_metadata` and the manifest (which holds signed download URLs) are never opened. `pensieve-traces convert` accepts exports too (see below).
-
-```python
-from pensieve_traces.readers.claude_ai import read_export
-
-sessions = read_export("path/to/export-dir")  # or path/to/conversations.json
-```
-
-- Sessions have `harness="claude.ai"` and come back in file order. There is no model name or token usage in the export.
-- Text is built from the `content` blocks (the top-level `text` is unreliable). A human turn becomes a user message; each `injected_prompt_block` (system notes such as the memory header) becomes its own `is_meta` message. An assistant turn with interleaved thinking, tool calls and results is split, in order, into assistant and tool messages.
-- Branches (edited or regenerated turns): only the path to the latest message is kept, and `Session.metadata["dropped_branch_messages"]` counts the rest.
-- Attached files and images become placeholders such as `[attached: name.pdf]`. Attachment text is dropped unless you pass `include_attachments=True`. Web results, image galleries and local resources in tool output are summarised in one line, not copied as JSON.
-- Malformed input raises `ClaudeAiParseError` with the file path and a location such as `conversations[3].chat_messages[7]`. The reader does no redaction, and injected prompt text, thinking and tool output stay in the sessions, so redact before sharing.
-
-## Converting to STS
-
-`pensieve-traces convert` turns a Claude Code session file or project directory, or a claude.ai export, into [STS](https://huggingface.co/docs/hub/main/en/session-traces-format) JSONL for the Hugging Face trace viewer, one `<session id>.jsonl` per session (stdlib only):
+## Quick start
 
 ```bash
-pip install "pensieve-traces[redact]"
+pip install "pensieve-traces[redact]"   # redaction is on by default and needs this extra
 pensieve-traces convert path/to/<project-dir> --to sts --out traces/
-pensieve-traces convert path/to/claude-export --to sts --out traces/   # claude.ai export
+pensieve-traces build convomem path/to/<project-dir> path/to/claude-export \
+  --out dataset/ --model qwen3:14b
 ```
 
-- Input is detected: a directory with `conversations.json` and no `*.jsonl` (or a file named `conversations.json`) is a claude.ai export; a directory of `*.jsonl` files or one session file is Claude Code. A directory holding both is refused as ambiguous, and one holding neither is an error. `--from claude-code` or `--from claude-ai` forces the reader. Exports write one `<conversation uuid>.jsonl` per conversation with `harness: "claude.ai"` in the header; attachment text is left out. The Hub's rendering of the `claude.ai` harness id is unverified (STS only lists `llama.app`).
+The first command writes Hugging Face STS traces from Claude Code sessions (a claude.ai export works too); the second builds a ConvoMem memory dataset with a local model. See the [docs](https://rahmansunny071.github.io/pensieve-traces/) for the guides, concepts and the full CLI reference.
 
-- Redaction is on by default. Without the `redact` extra the command exits with an error and writes nothing; pass `--no-redact` to write unredacted output (a warning is printed).
-- `--out` must not be the input directory (or inside it), nor the directory of an input file (for an export, its directory): Claude Code names sessions `<session id>.jsonl`, so writing there would overwrite the originals. The command refuses and writes nothing.
-- Sidechain (subagent) messages are skipped; add `--include-sidechains` to keep them.
-- Fields STS has no place for are dropped: parent ids, usage, request ids, `is_meta`/`is_error` flags, metadata, `cwd`, `project`, branch and session start/end times. Meta messages are still written.
-- From Python: `pensieve_traces.writers.sts.write_session(session, path)` and `session_to_sts_lines(session)` (the latter does not redact).
+## How this repo is built
 
-## Converting to ConvoMem conversations
-
-`pensieve-traces convert --to convomem-conversations` exports a project's sessions as [ConvoMem](https://huggingface.co/datasets/Salesforce/ConvoMem)-style conversations (one session per conversation, ordered by start time), in the filler-file layout [convomem-arena](https://github.com/rahmansunny071/convomem-arena) reads (loading them from a local folder needs [convomem-arena#18](https://github.com/rahmansunny071/convomem-arena/issues/18)):
-
-```bash
-pensieve-traces convert path/to/<project-dir> --to convomem-conversations --out convomem/
-pensieve-traces convert path/to/claude-export --to convomem-conversations --out convomem/
-```
-
-Input is detected as for STS (a claude.ai export gives one conversation per chat; `--from` overrides).
-
-`--out` is a directory and receives two files:
-
-- `conversations.json`: `{"evidence_items": [{"conversations": [{"id", "containsEvidence", "messages": [{"speaker", "text"}]}]}]}` (the filler-file layout; `id` is the session id, speakers are `User` / `Assistant`).
-- `conversations.message_ids.json`: `{conversation id: [canonical message id, ...]}`, index-aligned with each conversation's `messages`, so Q/A generation can point evidence at exact messages.
-
-Only user prompts and assistant prose are kept; meta, sidechain, system and tool-result messages and empty turns are dropped. Assistant tool calls become one-line `[ran Bash: git status]` summaries (from Python, `tool_activity="drop"` omits them). Redaction is on by default, as for STS, and one anonymizer covers all sessions. The command refuses (writing nothing) if either output file already exists or `--out` would overwrite the input sessions. From Python: `pensieve_traces.writers.convomem.write_conversations(sessions, out_dir)`, and `sessions_to_conversations(sessions)` / `sessions_to_conversations_with_ids(sessions)` (no redaction).
-
-## Building a ConvoMem dataset
-
-`pensieve-traces build convomem` turns Claude Code sessions and claude.ai chats, together, into a [ConvoMem](https://huggingface.co/datasets/Salesforce/ConvoMem)-style memory dataset about you (one persona, `me`): a model finds facts in your conversations and writes questions and answers across ConvoMem's six categories, and code checks that the evidence is verbatim.
-
-```bash
-pip install "pensieve-traces[redact]"
-pensieve-traces build convomem ~/path/to/<project-dir> path/to/claude-export \
-  --out dataset/ --model qwen3:14b [--topics topics.json]
-```
-
-- **Inputs:** one or more, in any mix (a Claude Code project directory or session file, a claude.ai export directory or `conversations.json`), detected as for `convert` (`--from` forces one reader for all inputs). Sessions with the same id across inputs are read once (the first wins).
-- **Model endpoint:** any OpenAI-compatible server, by default a local Ollama (`--base-url http://localhost:11434/v1`). `--api-key-env NAME` names the environment variable holding a key (never a flag; the command fails early if it is unset). A `--base-url` that is not `localhost`, `127.0.0.1` or `[::1]` is refused unless `--allow-remote-model` is given, and a URL with embedded credentials is always refused. Before the first model call the command prints which endpoint receives the text. The command never contacts the Hub; uploading stays a separate, explicit `upload` run.
-- **Redaction** is on by default and runs once, with one anonymizer, over all inputs before any text reaches the model, so placeholders are consistent across conversations, evidence and filler. It is best-effort: see "Redaction" for what it misses (names, health details and money amounts in chats, for example). Without the `redact` extra the command exits with an error and writes nothing; `--no-redact` sends and writes unredacted text and prints a warning. Sessions are redacted in input order, so adding or reordering inputs can change placeholders and miss part of the cache.
-- **Output** in `--out`:
-  - `core_benchmark/evidence_questions/<category folder>/<N>_evidence/me.json`, with folders `user_evidence`, `assistant_facts_evidence`, `changing_evidence`, `abstention_evidence`, `preference_evidence`, `implicit_connection_evidence` (folders without items are not created). Each item has `question`, `answer`, `message_evidences` and `conversations` (all `containsEvidence: true`).
-  - `core_benchmark/filler_conversations/me.json`: the conversations that are evidence for no item. convomem-arena's mixer leaves an item's own evidence out of its filler, but its data check does not, so keeping evidence conversations in the filler file would make most items flag there. The cost is a smaller filler pool.
-  - `build_manifest.json`: input and conversation counts (no paths), model name, prompt hashes, whether redaction was on, per-category item counts and the drop counts of each step. No base URL, key or timestamp.
-- **Topics (optional):** `--topics topics.json` maps a topic name to local matchers, `{"home-care": {"titles": ["caregiver"], "projects": ["demo"], "ids": []}}`. `ids` match a session id exactly, `projects` the project name (the basename of the session's working directory; claude.ai chats have none) and `titles` a case-insensitive substring of the title. Matching conversations get `"topic": [...]` and items `"topics": [...]` (the union over their evidence conversations), extra keys convomem-arena ignores; no model labels topics. A malformed file is an error before any model call.
-- **Where things go:** the dataset is written to a temporary directory beside `--out` and moved into place, so a failed run leaves nothing half-written. The command refuses an `--out` that is, or is inside, an input, that is a file, or that already holds `core_benchmark/` or `build_manifest.json`, and it never replaces an existing file. The model reply cache lives beside the dataset in `<out>.cache/` (or `--cache-dir`), so sharing the dataset folder never ships model outputs; the cache directory is refused inside an input or inside `--out`. A rerun reuses the cache.
-
-**Privacy.** The dataset is about you: it holds facts from your conversations. Review it before sharing, keep it private, and remember that redaction is pattern-based (see the table under "Redaction"). The cache holds model replies about your conversations too. From Python: `pensieve_traces.builders.convomem` (`extract_candidates`, `build_items`) and `dataset`.
-
-### Checking a ConvoMem dataset
-
-```bash
-pensieve-traces check-convomem dataset/
-```
-
-The structure check needs no extra dependency, reads only `dataset/` and writes nothing. It prints the files and items per category folder, then every problem as `file[item i]: reason`, and exits 1 if there is any problem (0 and `ok` otherwise). It checks that:
-
-- only known category folders and `<N>_evidence` folders with N in that category's range exist;
-- every evidence file is `{"evidence_items": [...]}` and each item has a non-empty `question`, `answer` and `conversations`, and `message_evidences` of length N;
-- each `message_evidences[].text` is, verbatim, a message of the item's conversations, and the evidence comes from distinct conversations (as many as the conversations marked `containsEvidence`);
-- `changing_evidence` evidence appears in conversation order;
-- each evidence file has a filler file of the same name, and no evidence conversation is in it.
-
-From Python: `pensieve_traces.builders.convomem.check_dataset(path)` returns a list of `Problem(file, item, reason)`. Content checks (answer grounding, duplicates, filler contamination) are not done here: they belong to [convomem-arena](https://github.com/rahmansunny071/convomem-arena)'s data check. Once [convomem-arena#18](https://github.com/rahmansunny071/convomem-arena/issues/18) lands, that check and the taskset can run on a local folder: run `python -m convomem_arena.data_check --local dataset/ --out reports/`, and point the taskset at `dataset/` as its local root (see #18 for the setting). Until then they read only the Hub dataset.
-
-## Uploading to the Hub
-
-`pensieve-traces upload` pushes converted traces to a Hugging Face dataset, **private by default**. Uploading is always intentional: `upload` is the only command that contacts the Hub, and `convert` and every other command only write local files. It needs the optional extra and your own login (`hf auth login`); the tool never asks for, stores or prints a token.
-
-```bash
-pip install "pensieve-traces[hub]"
-pensieve-traces upload traces/ --repo <user>/<dataset>   # private unless --public
-```
-
-- `convert` writes the STS header key `pensieveRedacted` (`true` when redaction ran, `false` with `--no-redact`). `upload` refuses any file whose first line lacks `"pensieveRedacted": true` (a missing marker counts as unredacted) unless you pass `--allow-unredacted`. The marker is an attestation, not proof; review traces before sharing.
-- Only the top-level `*.jsonl` files of the directory are uploaded, at the repo root.
-- If any file has `"harness": "claude.ai"` in its header, `upload` prints a warning with their count before the confirmation prompt (also with `--yes`) saying redaction does not catch names, health details, money amounts or card and bank account numbers and catches only some addresses and phone numbers. It never refuses on this basis; see "Redaction" for the measured coverage.
-- A summary (file count, total size, repo, visibility) is shown and you are asked to confirm; `--yes` skips the prompt.
-- `--public` must be explicit and prints a warning. If the repo already exists and is public, the upload is refused unless `--public` is given. Without the `hub` extra the command prints an install hint and exits 1.
-
-## How this repo is built: an agent factory
-
-Work happens through an issue-driven factory, either on Claude Code GitHub Actions (below) or from a Claude Code session with the `factory` skill. Agents write short designs, review them, build, test and open PRs. In the Actions factory only the maintainer starts or advances work and merges to `main`; the `factory` skill merges on green gates only if the maintainer's permissions allow its `gh pr merge … --admin` command (see the permission rule below). No agent publishes a release or uploads anything.
-
-1. Open an issue with the **Factory task** template.
-2. Add `factory:design`. The design agent writes `.factory/designs/issue-N.md` and opens a draft design PR.
-3. Review it; iterate with `@claude …` comments or edit it yourself.
-4. Add `design:approved` to the design PR. The build agent implements it on `factory/issue-N`, runs the checks until green and opens a PR.
-5. The review agent checks the PR against the design and `CLAUDE.md`.
-6. Merge. Releases stay manual.
-
-| Label | Applied by | Meaning |
-|---|---|---|
-| `factory:design` | maintainer, on an issue | Ask an agent for a design |
-| `factory:designing` | agent | Design in progress / awaiting review |
-| `design:approved` | maintainer, on the design PR | Signed off: start building |
-| `factory:building` | agent | Implementation in progress |
-| `factory:review` | agent | Implementation PR open, awaiting merge |
-| `factory:blocked` | agent | Agent hit something it shouldn't decide |
-| `factory:ready-to-merge` | factory skill | Every gate passed but the merge was refused: you merge it |
-
-Agent rules live in [`CLAUDE.md`](CLAUDE.md); the stage prompts in [`.claude/commands/`](.claude/commands/).
-
-The **`factory` skill** (`.claude/skills/factory/`) runs the same pipeline from a Claude Code session. Two of its rules:
-
-- **Docs ship with the code:** every PR updates the docs its change affects, and its Handoff says which (or why none). Older mismatches become sub-issues of the "Documentation tech-debt" issue (#43).
-- **Ready to merge:** if every gate passes but the merge is refused (the harness denies it or GitHub rejects it), the skill never works around it. It labels the PR `factory:ready-to-merge`, comments the exact merge command and carries on; `queue.py` and the end-of-run report list what waits for you. To let it merge by itself instead, see [Letting the factory merge for you](#letting-the-factory-merge-for-you).
-
-Two companion skills ship with it. **`sync-root-factory`** (`.claude/skills/sync-root-factory/`) brings the factory skill up to the latest agent-factory release as a PR ("sync the factory to the latest release"); the version this repo is on is in `.claude/skills/factory/VERSION`. **`factory-lesson`** (`.claude/skills/factory-lesson/`) files a factory problem as a `lesson` issue in agent-factory ("file a factory lesson: …"), after one confirmation and with no real data in the text.
+An issue-driven agent factory (designs, builds and reviews by agents, merged by the maintainer). See [How this repo is built](https://rahmansunny071.github.io/pensieve-traces/reference/factory/).
 
 ### Letting the factory merge for you
 
-Add this [permission rule](https://code.claude.com/docs/en/permissions) yourself, to `.claude/settings.local.json` (keep it out of git) or `~/.claude/settings.json`, not to the committed `.claude/settings.json`. It lets the `factory` skill run its merge command with your ruleset bypass (`--admin`), which it needs because a PR's author can't approve their own PR. Because it hands an agent your bypass, the repo doesn't ship it:
-
-```json
-{ "permissions": { "allow": ["Bash(gh pr merge * --merge --admin --delete-branch)"] } }
-```
-
-The rule matches only commands that start with `gh pr merge` and end in exactly `--merge --admin --delete-branch`, which is how the skill runs the merge (a trailing `-R` isn't covered). The skill still merges only when every gate passes, and never works around a refused merge.
+To let the `factory` skill merge by itself, add a permission rule to your own settings (not the committed `.claude/settings.json`). See [Letting the factory merge for you](https://rahmansunny071.github.io/pensieve-traces/reference/factory/#letting-the-factory-merge-for-you) for the rule and why the repo doesn't ship it.
 
 ## Development
 
-```bash
-uv sync --locked --extra dev
-uvx ruff@0.17.4 format --check . && uvx ruff@0.17.4 check .
-uv run --no-sync pytest -q
-```
+See [Development](https://rahmansunny071.github.io/pensieve-traces/reference/development/): `uv sync --locked --extra dev`, ruff, `uv run --no-sync pytest -q`.
 
 ## Author
 

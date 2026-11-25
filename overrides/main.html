@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+
+{#- A small teal section label above each page title. -#}
+{% block content %}
+  {% if page.parent and page.file.src_uri != "index.md" %}
+    <p class="pt-eyebrow">{{ page.parent.title }}</p>
+  {% endif %}
+  {{ super() }}
+{% endblock %}
