@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.client
 import io
 import json
 import logging
@@ -99,3 +100,41 @@ def test_http_error_has_status() -> None:
     exc = urllib.error.HTTPError("http://u", 503, "x", {}, io.BytesIO(b"body"))
     with pytest.raises(ModelClientError, match="503"):
         OpenAICompatibleClient("m", opener=Opener(exc=exc)).chat(MSGS)
+
+
+def test_key_with_trailing_cr_is_sent_stripped(monkeypatch) -> None:
+    monkeypatch.setenv("KEYVAR", SECRET + "\r\n")
+    op = Opener(OK)
+    OpenAICompatibleClient("m", api_key_env="KEYVAR", opener=op).chat(MSGS)
+    assert op.requests[0][0].unredirected_hdrs["Authorization"] == f"Bearer {SECRET}"
+
+
+def test_key_with_embedded_control_char_is_refused(monkeypatch) -> None:
+    key = "sk-te\x01st-EMBEDDED"
+    monkeypatch.setenv("KEYVAR", key)
+    op = Opener(OK)
+    client = OpenAICompatibleClient("m", api_key_env="KEYVAR", opener=op)
+    with pytest.raises(ModelClientError, match="KEYVAR") as err:
+        client.chat(MSGS)
+    for text in (
+        str(err.value),
+        repr(err.value),
+        repr(err.value.__cause__),
+        repr(err.value.__context__),
+    ):
+        assert "EMBEDDED" not in text and "sk-te" not in text
+    assert op.requests == []
+
+
+def test_opener_valueerror_never_echoes_key(monkeypatch) -> None:
+    monkeypatch.setenv("KEYVAR", SECRET)
+    op = Opener(exc=ValueError(f"Invalid header value b'Bearer {SECRET}'"))
+    with pytest.raises(ModelClientError) as err:
+        OpenAICompatibleClient("m", api_key_env="KEYVAR", opener=op).chat(MSGS)
+    assert SECRET not in str(err.value) and err.value.__suppress_context__
+
+
+def test_incomplete_read_becomes_modelclienterror() -> None:
+    op = Opener(exc=http.client.IncompleteRead(b"par", 10))
+    with pytest.raises(ModelClientError):
+        OpenAICompatibleClient("m", opener=op).chat(MSGS)

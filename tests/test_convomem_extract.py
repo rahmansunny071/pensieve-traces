@@ -286,3 +286,30 @@ def test_prompt_headers_carry_attribution() -> None:
         ):
             assert needle in head
     assert "Apache License" in (root / "LICENSE-Apache-2.0.txt").read_text(encoding="utf-8")
+
+
+def test_prompt_edit_invalidates_cache(tmp_path: Path, monkeypatch) -> None:
+    from pensieve_traces.builders.convomem import extract as mod
+
+    s = make("a", 4)
+    run([s], Fake([]), cache_dir=tmp_path)
+    original = mod.load_prompt
+    monkeypatch.setattr(mod, "load_prompt", lambda name: original(name) + "\nEdited.")
+    _, st = run([s], Fake([]), cache_dir=tmp_path)
+    assert st.model_calls == 1 and st.cache_hits == 0
+
+
+@pytest.mark.parametrize("n,windows", [(4, 1), (5, 2)])
+def test_window_plus_one_boundary(n, windows) -> None:
+    fake = Fake()
+    _, st = run([make("a", n)], fake, window=4, overlap=1)
+    assert st.windows == windows
+    last = fake.calls[-1][1]["content"]
+    assert f"a message {n - 1}" in last  # the final message is always covered
+
+
+def test_nothing_usable_condition_is_computable() -> None:
+    _, st = run([make("a", 10)], Fake(ModelClientError("x"), "garbage", "[]"), window=4, overlap=0)
+    assert st.failed_windows + st.dropped_bad_json == 2 and st.windows == 3
+    _, st = run([make("a", 4)], Fake("garbage"))
+    assert st.failed_windows == 0 and st.failed_windows + st.dropped_bad_json == st.windows

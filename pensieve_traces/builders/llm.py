@@ -12,6 +12,7 @@ size windows (and the server's context setting) accordingly.
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import urllib.error
@@ -63,9 +64,13 @@ class OpenAICompatibleClient:
             headers={"Content-Type": "application/json"},
         )
         if self.api_key_env:
-            key = os.environ.get(self.api_key_env)
+            key = (os.environ.get(self.api_key_env) or "").strip()
             if not key:
                 raise ModelClientError(f"environment variable {self.api_key_env} is not set")
+            if any(ord(c) < 32 or ord(c) == 127 for c in key):
+                raise ModelClientError(
+                    f"environment variable {self.api_key_env} contains control characters"
+                )
             # Unredirected: urllib's redirect handler must never copy the key to another host.
             request.add_unredirected_header("Authorization", f"Bearer {key}")
         try:
@@ -77,6 +82,9 @@ class OpenAICompatibleClient:
             raise ModelClientError("request timed out") from None
         except (urllib.error.URLError, OSError):
             raise ModelClientError("could not reach the model endpoint") from None
+        except (ValueError, http.client.HTTPException):
+            # e.g. an invalid header value (its text would echo the key) or IncompleteRead.
+            raise ModelClientError("request could not be completed") from None
         try:
             content = json.loads(raw)["choices"][0]["message"]["content"]
         except (ValueError, KeyError, IndexError, TypeError):

@@ -17,8 +17,9 @@ one reaching the end. The model sees window-local indices ``[0] .. [n-1]``; :cla
 stores the conversation-global ``positions`` as well as the message ids.
 
 Replies are cached per window (see :func:`extract_candidates`). A window whose model call fails is
-skipped and counted in ``ExtractStats.failed_windows``; one bad window never aborts the run, so a
-caller (#55) must treat "every window failed" (``failed_windows == windows``) as an error.
+skipped and counted in ``ExtractStats.failed_windows``; one bad window never aborts the run.
+``dropped_bad_json`` counts windows whose reply was unparseable. So a caller (#55) must treat
+``failed_windows + dropped_bad_json == windows`` (nothing usable came back) as an error.
 Ollama's small default context can silently truncate oversized prompts.
 """
 
