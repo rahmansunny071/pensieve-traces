@@ -234,3 +234,136 @@ def test_convomem_rejects_sidechains_flag(
     assert run(*args, "--include-sidechains") == 1
     assert "--include-sidechains" in capsys.readouterr().err
     assert not (tmp_path / "o").exists()
+
+
+EXPORT = FIX / "claude_ai" / "export"
+EXPORT_IDS = ["conv-plain", "conv-tools", "conv-branch", "conv-attach", "conv-empty"]
+
+
+def _copy_export(tmp_path: Path) -> Path:
+    dst = tmp_path / "export"
+    shutil.copytree(EXPORT, dst)
+    return dst
+
+
+def _snapshot(root: Path) -> dict[str, bytes]:
+    return {
+        str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()
+    }
+
+
+@pytest.mark.parametrize("target", ["dir", "file"])
+def test_convert_claude_ai_sts(tmp_path: Path, fake_teich: None, target: str) -> None:
+    src = EXPORT if target == "dir" else EXPORT / "conversations.json"
+    out = tmp_path / "out"
+    assert run(str(src), "--to", "sts", "--out", str(out)) == 0
+    assert sorted(p.stem for p in out.iterdir()) == sorted(EXPORT_IDS)
+    header = json.loads((out / "conv-plain.jsonl").read_text().splitlines()[0])
+    assert header["harness"] == "claude.ai"
+    assert header["pensieveRedacted"] is True
+
+
+def test_convert_claude_ai_convomem(tmp_path: Path, fake_teich: None) -> None:
+    out = tmp_path / "out"
+    assert run(str(EXPORT), "--to", "convomem-conversations", "--out", str(out)) == 0
+    assert sorted(p.name for p in out.iterdir()) == [
+        "conversations.json",
+        "conversations.message_ids.json",
+    ]
+    payload = json.loads((out / "conversations.json").read_text())
+    ids = {c["id"] for c in payload["evidence_items"][0]["conversations"]}
+    assert ids <= set(EXPORT_IDS) and ids
+
+
+@pytest.mark.parametrize("to", ["sts", "convomem-conversations"])
+@pytest.mark.parametrize("out", [".", "sub"])
+def test_claude_ai_out_in_export_dir_refused(
+    tmp_path: Path, to: str, out: str, fake_teich: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    export = _copy_export(tmp_path)
+    before = _snapshot(export)
+    assert run(str(export), "--to", to, "--out", str(export / out)) == 1
+    assert _snapshot(export) == before
+    assert not (export / "sub").exists()
+    err = capsys.readouterr().err
+    assert err.count("\n") == 1 and "not overwritten" in err
+
+
+def test_claude_ai_out_beside_conversations_file_refused(
+    tmp_path: Path, fake_teich: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    export = _copy_export(tmp_path)
+    before = _snapshot(export)
+    args = (str(export / "conversations.json"), "--to", "convomem-conversations")
+    assert run(*args, "--out", str(export)) == 1
+    assert _snapshot(export) == before
+    assert "not overwritten" in capsys.readouterr().err
+
+
+def test_claude_ai_missing_teich_writes_nothing(
+    tmp_path: Path, no_teich: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = tmp_path / "out"
+    assert run(str(EXPORT), "--to", "sts", "--out", str(out)) == 1
+    assert "redact" in capsys.readouterr().err
+    assert not out.exists() or list(out.iterdir()) == []
+
+
+def test_claude_ai_no_redact_warns(
+    tmp_path: Path, no_teich: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = tmp_path / "out"
+    assert run(str(EXPORT), "--to", "sts", "--out", str(out), "--no-redact") == 0
+    assert len(list(out.iterdir())) == len(EXPORT_IDS)
+    assert "warning" in capsys.readouterr().err
+
+
+def test_ambiguous_dir_errors_and_from_resolves(
+    tmp_path: Path, fake_teich: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    mixed = _copy_export(tmp_path)
+    shutil.copy(SESSION, mixed / "sess-sts.jsonl")
+    out = tmp_path / "out"
+    assert run(str(mixed), "--to", "sts", "--out", str(out)) == 1
+    err = capsys.readouterr().err
+    assert "ambiguous" in err and "--from" in err and not out.exists()
+    assert run(str(mixed), "--from", "claude-ai", "--to", "sts", "--out", str(out)) == 0
+    assert sorted(p.stem for p in out.iterdir()) == sorted(EXPORT_IDS)
+    out2 = tmp_path / "out2"
+    assert run(str(mixed), "--from", "claude-code", "--to", "sts", "--out", str(out2)) == 0
+    assert [p.name for p in out2.iterdir()] == ["sess-sts.jsonl"]
+
+
+def test_dir_with_neither_errors(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    (tmp_path / "empty").mkdir()
+    assert run(str(tmp_path / "empty"), "--to", "sts", "--out", str(tmp_path / "o")) == 1
+    assert "no *.jsonl session files or conversations.json" in capsys.readouterr().err
+
+
+def test_from_claude_ai_without_export_errors(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    args = (str(PROJECT), "--from", "claude-ai", "--to", "sts", "--out", str(tmp_path / "o"))
+    assert run(*args) == 1
+    assert "no conversations.json in" in capsys.readouterr().err
+
+
+def test_malformed_export_is_one_line(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    bad = tmp_path / "export"
+    bad.mkdir()
+    (bad / "conversations.json").write_text("{not json")
+    assert run(str(bad), "--to", "sts", "--out", str(tmp_path / "o")) == 1
+    err = capsys.readouterr().err
+    assert err.startswith("pensieve-traces: error:") and "Traceback" not in err
+    assert err.count("\n") == 1
+
+
+def test_load_sessions_mixed_inputs() -> None:
+    cc = cli.load_sessions(PROJECT)
+    ai = cli.load_sessions(EXPORT)
+    assert {s.harness for s in cc} != {s.harness for s in ai}
+    assert [s.id for s in ai] == EXPORT_IDS
+    assert len(cli.load_sessions(SESSION)) == 1
+    assert [
+        s.id for s in cli.load_sessions(EXPORT / "conversations.json", "claude-ai")
+    ] == EXPORT_IDS
