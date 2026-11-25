@@ -43,7 +43,8 @@ usage example (a command or code snippet) when there is one.
 - Reuse opportunities and known pitfalls from the brainstorm.
 - Lane and position: "Lane #L, step 2 of 3" (also visible from the native parent link).
 - Verified against real data? Say which assumptions about external formats or data were confirmed
-  (and how) and which are assumptions. Unverified ones are for the maintainer's reality check.
+  (and how) and which are assumptions. Unverified ones are for the maintainer's reality check. Where `CLAUDE.md` allows reading
+  real data, "verified locally, shapes only" is a valid answer.
 - Risk tier: standard | critical (privacy/security code, a new external dependency, a data contract
   other issues build on).
 

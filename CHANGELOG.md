@@ -10,3 +10,4 @@
 - Unreleased: ConvoMem conversations export (`convert --to convomem-conversations`, `write_conversations`, `sessions_to_conversations`) with a message-ID map (#5).
 - Unreleased: README states that uploading is always intentional: only `pensieve-traces upload` contacts the Hub.
 - Unreleased: Factory skill updated to agent-factory v0.6.0 (docs-with-code rule and Documentation tech-debt tracker; ready-to-merge hand-off when a merge is refused, agent-factory#32); new `factory:ready-to-merge` label.
+- Unreleased: Factory skill synced to agent-factory v0.8.0 with its new `sync-root-factory` skill (version marker `.claude/skills/factory/VERSION`), plus the `factory-lesson` skill; the Reality check now reads a `Real data:` line from `CLAUDE.md` (missing means `never`).

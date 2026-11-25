@@ -139,6 +139,8 @@ The **`factory` skill** (`.claude/skills/factory/`) runs the same pipeline from 
   { "permissions": { "allow": ["Bash(gh pr merge * --merge --admin --delete-branch)"] } }
   ```
 
+Two companion skills ship with it. **`sync-root-factory`** (`.claude/skills/sync-root-factory/`) brings the factory skill up to the latest agent-factory release as a PR ("sync the factory to the latest release"); the version this repo is on is in `.claude/skills/factory/VERSION`. **`factory-lesson`** (`.claude/skills/factory-lesson/`) files a factory problem as a `lesson` issue in agent-factory ("file a factory lesson: …"), after one confirmation and with no real data in the text.
+
 ## Development
 
 ```bash

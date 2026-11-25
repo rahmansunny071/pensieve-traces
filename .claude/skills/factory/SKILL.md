@@ -49,14 +49,17 @@ When the run log or memory disagrees with GitHub, GitHub wins.
 1. **Model.** You should be on Opus. If not, tell the user before orchestrating.
 2. **Repo state.** `gh auth status` is OK, `main` is clean and up to date, and the `CLAUDE.md` checks pass
    on `main`. If `main` is red, stop.
-3. **Read** `CLAUDE.md` (context, "Release phase", "Definition of checks pass", hard rules, "Where
+3. **Read** `CLAUDE.md` (context, "Release phase", "Real data", "Definition of checks pass", hard rules, "Where
    knowledge lives") and the stage prompts in `.claude/commands/`.
 4. **Repo slug.** `gh repo view --json nameWithOwner -q .nameWithOwner`. Paste that exact value into
    every brief; never type it from memory.
 5. **What's waiting.** Run `python .claude/skills/factory/scripts/queue.py`. It shows issues in progress,
    **issues waiting on the maintainer and whether they've replied**, and the ready queue.
    `runlog.py status` shows the local log's view. If anything is in progress or has new replies, handle
-   that first (see "Resume").
+   that first (see "Resume"). Clear stale labels: `gh issue list --state closed --label
+   factory:ready-to-merge`, then `gh issue edit <N> --remove-label factory:ready-to-merge` for each.
+   Merged PRs keep it too: `gh pr list --state merged --label factory:ready-to-merge`, then
+   `gh pr edit <N> --remove-label factory:ready-to-merge`.
 6. **Documentation tech-debt.** `python .claude/skills/factory/scripts/lanes.py doc-debt find` prints the
    tracking issue's number (an open issue titled exactly "Documentation tech-debt", labelled
    `documentation`), creating it if it's missing, so repos bootstrapped before v0.6.0 work too. Every
@@ -229,10 +232,12 @@ When every gate passes but the merge itself is refused, the maintainer merges it
 5. **Move on.** The issue stays open, so its lane's later issues wait; other lanes carry on.
    `queue.py` lists these under "Waiting for you to merge", and "When you're done" reports them so the
    maintainer can merge them in one batch. Once the PR is merged the issue closes and the lane advances;
-   if the label is still on a closed issue, remove it.
+   a label left on a closed issue is cleared in "Before you start" (step 5).
 
 The maintainer can let the skill merge itself by opting in to a permission rule (README → "Letting the
-factory merge for you"). The template never ships it.
+factory merge for you"). The template never ships it. That rule matches only commands that end in
+`--delete-branch`, which is how you run the merge (`references/gates.md` → "Merge"); variants with `-R` or
+other trailing flags aren't covered, so don't add any.
 
 ### Resume
 
@@ -269,11 +274,31 @@ reviewed against current code.
 
 ### Reality check
 
-Agents may not read real user data (`CLAUDE.md`), so they can only *assume* how external formats look. When
-a plan or review rests on an assumption about real data that the code, the issue or a cited spec can't
-verify (a file layout, a field that "probably" exists), **don't build on it.** Flag it as a question:
-ideally the maintainer runs a local script that prints only the **shape** of their data (record types,
-field names, counts), never values, and replies with the output.
+The level of real-data access is a per-repo choice. Read it from `CLAUDE.md` **on `main`** (the session
+checkout), never from a PR branch, so a builder's edit can't loosen its own run (a PR that changes the
+line also fails the `CLAUDE.md` gate). The first line under `## Real data` must match
+`^Real data: (never|with-approval|allowed)\.`. **Anything else means `never`:** a missing section (repos
+rendered before this release, or a repo that adopted the skill by hand), a typo, or two such lines. A
+stricter hard rule in `CLAUDE.md` (for example "never read ~/.codex") overrides the level.
+
+- **`never`:** agents can only *assume* how external formats look. When a plan or review rests on an
+  assumption about real data that the code, the issue or a cited spec can't verify (a file layout, a field
+  that "probably" exists), **don't build on it.** Flag it as a question: ideally the maintainer runs a
+  local script that prints only the **shape** of their data (record types, field names, counts), never
+  values, and replies with the output.
+- **`with-approval`:** ask first, through "Flag and continue" (an inline PR question, or in the session if
+  the maintainer is present). An approval counts only if it is the **maintainer's** reply, names **one data
+  source** (a path or an export; "read my data" doesn't count), and is **recorded on GitHub** on the
+  issue or PR thread. If it was given in the session, post it on the PR before any read. It covers that
+  source for **that issue/PR only**; the next issue asks again. Standing access means choosing `allowed`.
+  Subagents can't ask: put the approved source and a link to the approval in their brief. Then read locally.
+- **`allowed`:** read locally as needed.
+
+At every level: read real data where it lives. Never copy it into the repo or worktree; use a scratch
+directory outside the repo. Record **only shapes** (field names, counts, types) in plans, issues, PR
+bodies, Handoffs, review comments, commit messages, run-log `--note` text and subagent RESULT blocks. Put
+no real data in fixtures, commits or GitHub text. Where the data was read locally, say "verified locally,
+shapes only".
 
 ## Coexisting with the GitHub Actions factory
 
@@ -295,7 +320,8 @@ model and role. Report:
 - the cost summary.
 
 If a problem was a factory problem rather than a project problem, say so: it belongs in the factory
-template as a `lesson` issue.
+template as a `lesson` issue. Use the `factory-lesson` skill to file it (it checks for duplicates,
+keeps real data out of the body and asks the maintainer once); don't file it by hand.
 
 ## Reference files
 
