@@ -52,3 +52,9 @@ Privacy: redacted text goes to the endpoint, printed first; the dataset is about
 
 ## Size estimate
 M
+
+## Implementation notes
+- Built as planned: `cli._build_convomem` (steps 1-8), `cli.make_client` (the injection seam), `builders/convomem/dataset.py` (`write_dataset`, `build_manifest`, `commit_dataset`, `CommitError`) and `topics.py` (`load_topics`, `match_topics`, `TopicsError`), tests in `tests/test_cli_build.py` and `tests/test_convomem_dataset.py`.
+- Filler excludes every evidence conversation (the issue text said every conversation); see the README and the `dataset.py` docstring.
+- Minor choices: the manifest holds the `sessions_by_harness` counts keyed by harness id (`claude_code`, `claude_ai`); the endpoint line and item summary go to stderr, stdout carries only the `--out` path; the temp dir is `<out>.tmp-XXXX`, created by `mkdtemp` (mode 0700 until moved into a new `--out`).
+- Tests use a scripted fake client and a counting fake anonymizer; the real-teich variant runs only in the redact job.
