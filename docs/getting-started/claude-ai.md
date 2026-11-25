@@ -8,7 +8,7 @@ description: "Convert a claude.ai data export into STS or ConvoMem conversations
 Export your chats from claude.ai (Settings, Privacy, Export data), then point `convert` at the export directory or its `conversations.json`:
 
 ```bash
-pip install "pensieve-traces[redact]"
+pip install "pensieve-traces[redact] @ git+https://github.com/rahmansunny071/pensieve-traces@v0.1.0"
 pensieve-traces convert path/to/claude-export --to sts --out traces/
 pensieve-traces convert path/to/claude-export --to convomem-conversations --out convomem/
 ```

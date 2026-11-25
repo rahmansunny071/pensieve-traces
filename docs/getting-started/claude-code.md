@@ -8,7 +8,7 @@ description: "Turn a Claude Code session file or project directory into STS JSON
 `pensieve-traces convert` turns a Claude Code session file or project directory, or a claude.ai export, into [STS](https://huggingface.co/docs/hub/main/en/session-traces-format) JSONL for the Hugging Face trace viewer, one `<session id>.jsonl` per session (stdlib only):
 
 ```bash
-pip install "pensieve-traces[redact]"
+pip install "pensieve-traces[redact] @ git+https://github.com/rahmansunny071/pensieve-traces@v0.1.0"
 pensieve-traces convert path/to/<project-dir> --to sts --out traces/
 ```
 

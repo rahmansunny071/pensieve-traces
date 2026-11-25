@@ -29,7 +29,7 @@ pi (later)  ─┘            timestamp, role, text,      ├─ ConvoMem conver
 ## Quick start
 
 ```bash
-pip install "pensieve-traces[redact]"   # redaction is on by default and needs this extra
+pip install "pensieve-traces[redact] @ git+https://github.com/rahmansunny071/pensieve-traces@v0.1.0"   # redaction is on by default and needs this extra
 pensieve-traces convert path/to/<project-dir> --to sts --out traces/
 pensieve-traces build convomem path/to/<project-dir> path/to/claude-export \
   --out dataset/ --model qwen3:14b

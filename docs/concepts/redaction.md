@@ -8,7 +8,7 @@ description: "What redaction does, how it is applied, and the measured coverage 
 !!! warning "Privacy"
     Traces can contain prompts, tool output, local paths, secrets, private code and personal data. Redaction is on by default, but review anything before you publish it, and keep datasets private when unsure.
 
-Install the optional extra to enable redaction: `pip install "pensieve-traces[redact]"` (uses [teich](https://pypi.org/project/teich/)'s `TraceAnonymizer`; the base install has no dependencies).
+Install the optional extra to enable redaction: `pip install "pensieve-traces[redact] @ git+https://github.com/rahmansunny071/pensieve-traces@v0.1.0"` (uses [teich](https://pypi.org/project/teich/)'s `TraceAnonymizer`; the base install has no dependencies).
 
 ```python
 from pensieve_traces import prepare_for_output, redact_session

@@ -1,6 +1,6 @@
 [project]
 name = "pensieve-traces"
-version = "0.0.0"
+version = "0.1.0"
 description = "Turn coding-agent session traces (Claude Code first) into Hugging Face STS traces, OpenRouter Broadcast traces and ConvoMem-style memory datasets."
 readme = "README.md"
 authors = [{ name = "Sajjadur Rahman", email = "rahmansunny071@gmail.com" }]

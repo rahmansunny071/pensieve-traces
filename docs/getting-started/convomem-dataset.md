@@ -8,7 +8,7 @@ description: "Generate a ConvoMem-style memory dataset about you from Claude Cod
 `pensieve-traces build convomem` turns Claude Code sessions and claude.ai chats, together, into a [ConvoMem](https://huggingface.co/datasets/Salesforce/ConvoMem)-style memory dataset about you (one persona, `me`): a model finds facts in your conversations and writes questions and answers across ConvoMem's six categories, and code checks that the evidence is verbatim.
 
 ```bash
-pip install "pensieve-traces[redact]"
+pip install "pensieve-traces[redact] @ git+https://github.com/rahmansunny071/pensieve-traces@v0.1.0"
 pensieve-traces build convomem path/to/<project-dir> path/to/claude-export \
   --out dataset/ --model qwen3:14b [--topics topics.json]
 ```
