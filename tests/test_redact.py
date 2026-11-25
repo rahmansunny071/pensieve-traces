@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import types
 import warnings
@@ -15,6 +16,7 @@ import pensieve_traces
 from pensieve_traces import (
     RedactionUnavailableError,
     Session,
+    ToolCall,
     prepare_for_output,
     redact_session,
 )
@@ -312,3 +314,162 @@ def test_real_teich_malformed_arguments_with_duplicate_key(real_session, raw):
     real_session.messages[1].tool_calls[0].arguments = raw
     out = redact_session(real_session).messages[1].tool_calls[0].arguments
     assert "jdoe@vexlor-mail.io" not in out
+
+
+_TRAIL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._%+'-]*@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*")
+
+
+class FakeTeich:
+    """Mimics teich 0.3.8: lower-cased address map, ``@example.com`` left alone, and no match
+    when the address is followed by a period (the bug the guard compensates for)."""
+
+    def __init__(self) -> None:
+        self.map: dict[str, str] = {}
+
+    def anonymize_text(self, text: str) -> str:
+        def sub(m: re.Match[str]) -> str:
+            if text[m.end() : m.end() + 1] == "." and not text[m.end() + 1 : m.end() + 2].isalnum():
+                return m[0]
+            addr = m[0].lower()
+            if addr.endswith("@example.com"):
+                return m[0]
+            return self.map.setdefault(addr, f"redacted-user{len(self.map) + 1}@example.com")
+
+        return _TRAIL.sub(sub, text)
+
+    def anonymize_value(self, value: Any) -> Any:
+        if isinstance(value, str):
+            return self.anonymize_text(value)
+        if isinstance(value, list):
+            return [self.anonymize_value(v) for v in value]
+        if isinstance(value, dict):
+            return {self.anonymize_text(k): self.anonymize_value(v) for k, v in value.items()}
+        return value
+
+
+ADDR = "sam.lee@vexlor-mail.invalid"
+
+
+def _session_with(*texts: str) -> Session:
+    s = load_session()
+    s.messages = s.messages[:1]
+    s.messages[0].tool_calls = []
+    s.messages[0].metadata = {}
+    s.messages[0].reasoning = None
+    s.metadata = {}
+    s.title = s.cwd = s.project = s.git_branch = None
+    s.messages[0].text = " ||| ".join(texts)
+    return s
+
+
+def test_fake_alone_misses_the_trailing_period_like_teich():
+    assert FakeTeich().anonymize_text(f"mail {ADDR}.") == f"mail {ADDR}."
+
+
+@pytest.mark.parametrize(
+    "tail",
+    [
+        ".",
+        ".)",
+        '."',
+        ".\u201d",
+        ".\u2019",
+        ".`",
+        ".*",
+        ".|",
+        ".<br>",
+        "..",
+        ".\n",
+        ".  next",
+        "!",
+        "?",
+    ],
+)
+def test_email_followed_by_period_gets_bare_placeholder(tail):
+    fake = FakeTeich()
+    out = redact_session(_session_with(f"a {ADDR}{tail} x", f"b {ADDR} c"), fake).messages[0].text
+    placeholder = fake.map[ADDR]
+    assert ADDR not in out
+    assert out == f"a {placeholder}{tail} x ||| b {placeholder} c"
+
+
+def test_email_at_end_of_text_and_other_cases():
+    fake = FakeTeich()
+    out = (
+        redact_session(
+            _session_with(f"end {ADDR}.", "o'brien@x.invalid.", "SAM.LEE@VEXLOR-MAIL.INVALID."),
+            fake,
+        )
+        .messages[0]
+        .text
+    )
+    assert "vexlor" not in out.lower() and "brien" not in out
+    assert out.count(fake.map[ADDR]) == 2  # lower-cased map: upper-case form shares it
+
+
+def test_domain_continuation_and_plain_periods_are_left_alone_by_the_guard():
+    fake = FakeTeich()
+    # the guard must not touch these: no address, or a domain that continues past the period
+    # (a@b.invalid.com is teich's to match). me@example.com. is an address followed by a period;
+    # the guard hands it to the fake, which leaves @example.com alone, so the text is unchanged.
+    text = "v1.2. See file.txt. Mail me@example.com. or a@b.invalid.com"
+    out = redact_session(_session_with(text), fake).messages[0].text
+    assert out == text.replace("a@b.invalid.com", fake.map["a@b.invalid.com"])
+    assert set(fake.map) == {"a@b.invalid.com"}
+
+
+def test_guard_leaves_assignments_and_non_teich_candidates_to_the_anonymizer():
+    fake = FakeTeich()
+    # "=" is legal in teich's local part, so the candidate would be "key=sam@...": skip it, or a
+    # secret like password=P@ssw0rd.!x would only be redacted in part.
+    # f"{ADDR}..x": the period run is followed by a letter, so it is not a boundary (teich's own
+    # lookahead rejects "." too); backtracking to one period must not make it one.
+    for text in (
+        f"key={ADDR}.",
+        "password=P@ssw0rd.!Abc9",
+        "x@y.in1.",
+        "x@localhost.",
+        f"{ADDR}..x",
+    ):
+        out = redact_session(_session_with(text), fake).messages[0].text
+        assert out == text, text
+    assert fake.map == {}
+
+
+def test_trailing_period_email_in_every_field_and_arguments():
+    fake = FakeTeich()
+    s = _session_with(f"t {ADDR}.")
+    s.title = f"title {ADDR}."
+    s.messages[0].reasoning = f"r {ADDR}."
+    s.metadata = {"k": [f"{ADDR}."], f"key {ADDR}.": "v"}
+    s.messages[0].metadata = {"m": f"{ADDR}."}
+    s.messages[0].tool_calls = [
+        ToolCall(id="c1", name="Bash", arguments=json.dumps({"cmd": f"echo {ADDR}."}))
+    ]
+    before = s.to_dict()
+    out = redact_session(s, fake)
+    assert s.to_dict() == before
+    assert ADDR not in out.to_json()
+    assert set(fake.map) == {ADDR}
+
+
+def test_placeholder_shared_across_sessions_with_one_anonymizer():
+    fake = FakeTeich()
+    a = redact_session(_session_with(f"x {ADDR}."), fake).messages[0].text
+    b = redact_session(_session_with(f"y {ADDR} z"), fake).messages[0].text
+    assert a.split()[1] == f"{fake.map[ADDR]}."
+    assert b.split()[1] == fake.map[ADDR]
+
+
+def test_value_keys_not_rewritten_without_an_email_period():
+    seen: list[Any] = []
+
+    class Spy(FakeTeich):
+        def anonymize_value(self, value: Any) -> Any:
+            seen.append(value)
+            return super().anonymize_value(value)
+
+    s = _session_with("plain")
+    s.metadata = {"password": "p", "nested": {"data": "d"}}
+    redact_session(s, Spy())
+    assert seen[0] == {"password": "p", "nested": {"data": "d"}}
