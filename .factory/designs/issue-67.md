@@ -35,3 +35,10 @@ Privacy: strictly widens redaction; the lookahead is deliberately conservative. 
 S
 
 Docs updated: README "Redaction" (the intro sentence now says the table measures `redact_session`, teich plus the pre-pass; email row names the measured followers), the `test_redact_chat_coverage.py` docstring and both `redact.py` docstrings, CHANGELOG, `redact.py` docstring, this design's notes.
+
+## Implementation notes (orchestrator)
+
+- Built as `_EmailPeriodGuard` in `pensieve_traces/redact.py`, PR #70: a pre-pass that hands an email followed by periods (and a boundary) to the same inner anonymizer, so it gets the bare address's placeholder; dict keys are pre-passed without mutating the dict; skipped when there is no `@`.
+- Design review (6059866171): teich's own local-part pattern and boundary (curly quotes, backticks, markdown, apostrophes), the `@` guard, dict keys.
+- Code review (6060087708): one blocker, fixed in 11c620f and verified by the orchestrator: the pre-pass could split a `KEY=value` secret containing `@` (`password=P@ssw0rd.!Abc9`) and leave its tail visible. The guard now leaves a candidate to teich when it contains `=` or isn't exactly teich's email match; lookahead `(?![.A-Za-z0-9_%+-])`. The reviewer fuzzed 300k random strings with no leak vs teich alone.
+- Not covered (documented in README): a letter, digit, `-`, `_`, `%` or `+` right after the period (`.5`, `.2024`). Other PII kinds: #66.
