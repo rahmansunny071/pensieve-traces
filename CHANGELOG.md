@@ -21,3 +21,4 @@
 - Unreleased: Redaction replaces an email address directly followed by a period (teich 0.3.8 left `mail a@b.invalid.` unredacted) with the same placeholder as the bare address, in text, metadata keys and values and tool arguments (`_EmailPeriodGuard` in `redact.py`); README "Redaction" table and pinned coverage rows updated (#67).
 - Unreleased: README: the ConvoMem dataset row says local-folder runs need convomem-arena#18, and the factory intro matches opt-in merges by the `factory` skill (#74).
 - Unreleased: README: ConvoMem conversations no longer claim convomem-arena loads them from a local folder today (needs convomem-arena#18) (#77).
+- Unreleased: README: new "Letting the factory merge for you" subsection (the heading the `factory` skill points to) holds the opt-in merge permission rule (#79).

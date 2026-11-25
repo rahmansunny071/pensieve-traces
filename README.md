@@ -214,13 +214,19 @@ Agent rules live in [`CLAUDE.md`](CLAUDE.md); the stage prompts in [`.claude/com
 The **`factory` skill** (`.claude/skills/factory/`) runs the same pipeline from a Claude Code session. Two of its rules:
 
 - **Docs ship with the code:** every PR updates the docs its change affects, and its Handoff says which (or why none). Older mismatches become sub-issues of the "Documentation tech-debt" issue (#43).
-- **Ready to merge:** if every gate passes but the merge is refused (the harness denies it or GitHub rejects it), the skill never works around it. It labels the PR `factory:ready-to-merge`, comments the exact merge command and carries on; `queue.py` and the end-of-run report list what waits for you. To let it merge by itself instead, add this [permission rule](https://code.claude.com/docs/en/permissions) to `.claude/settings.json` or `~/.claude/settings.json` yourself. It lets the agent use your ruleset bypass (`--admin`), so the repo doesn't ship it:
-
-  ```json
-  { "permissions": { "allow": ["Bash(gh pr merge * --merge --admin --delete-branch)"] } }
-  ```
+- **Ready to merge:** if every gate passes but the merge is refused (the harness denies it or GitHub rejects it), the skill never works around it. It labels the PR `factory:ready-to-merge`, comments the exact merge command and carries on; `queue.py` and the end-of-run report list what waits for you. To let it merge by itself instead, see [Letting the factory merge for you](#letting-the-factory-merge-for-you).
 
 Two companion skills ship with it. **`sync-root-factory`** (`.claude/skills/sync-root-factory/`) brings the factory skill up to the latest agent-factory release as a PR ("sync the factory to the latest release"); the version this repo is on is in `.claude/skills/factory/VERSION`. **`factory-lesson`** (`.claude/skills/factory-lesson/`) files a factory problem as a `lesson` issue in agent-factory ("file a factory lesson: …"), after one confirmation and with no real data in the text.
+
+### Letting the factory merge for you
+
+Add this [permission rule](https://code.claude.com/docs/en/permissions) to `.claude/settings.local.json`, `.claude/settings.json` or `~/.claude/settings.json` yourself. It lets the `factory` skill run its merge command, which uses your ruleset bypass (`--admin`) because a PR's author can't approve their own PR, so the repo doesn't ship it:
+
+```json
+{ "permissions": { "allow": ["Bash(gh pr merge * --merge --admin --delete-branch)"] } }
+```
+
+The rule matches only commands that end in `--delete-branch`, which is how the skill runs the merge; the skill still merges only when every gate passes, and never works around a refused merge.
 
 ## Development
 
