@@ -41,3 +41,9 @@ The issue says the synthetic dataset lives in `tests/fixtures/`; it is generated
 
 ## Size estimate
 S/M
+
+## Implementation notes
+- Built as planned in `builders/convomem/check.py` (`Problem`, `check_dataset`, `summarize`) and `cli._check_convomem`. Exit 1 on problems is a `SystemExit(1)` after printing; a missing DIR is a `CliError`.
+- Distinctness (rule 4b) is a bipartite matching of evidence texts to the conversations marked `containsEvidence`; changing-evidence order is checked on those conversations, only when all texts are found.
+- The filler check is keyed on the file name: evidence ids of all evidence files named `X.json` must not appear in `filler_conversations/X.json`.
+- Tests generate the clean dataset in `tmp_path` with `dataset.write_dataset` (with topics keys), then edit JSON for each broken variant.
