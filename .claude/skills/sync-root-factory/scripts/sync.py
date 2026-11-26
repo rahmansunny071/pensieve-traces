@@ -1,6 +1,6 @@
 """Deterministic guards for the sync-root-factory skill.
 
-Brings a downstream repo up to a release TAG of rahmansunny071/agent-factory. This script does
+Brings a downstream repo up to a release TAG of rahmansunny071/amplifactory. This script does
 everything that can be checked by code (what is dirty, which tag, what differs, what may be
 overwritten); the agent does the judgement (hand-ports, conflicts, the PR). Stdlib only, plus
 `git` (and `gh` for `labels`). Every command that refuses exits 1 with "refused: <why>". Each
@@ -44,7 +44,10 @@ import tarfile
 import tempfile
 from pathlib import Path
 
-REPO = "rahmansunny071/agent-factory"
+REPO = "rahmansunny071/amplifactory"
+# the official template's names: the repo was renamed from agent-factory (#67), and generated repos
+# still record the old one in `_src_path`; GitHub redirects it
+OFFICIAL_REPOS = (REPO, "rahmansunny071/agent-factory")
 DEFAULT_SOURCE = f"https://github.com/{REPO}.git"
 TAG_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
 VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
@@ -54,14 +57,9 @@ FACTORY = ".claude/skills/factory"
 SKILLS = ".claude/skills"
 SKILL_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 # `_src_path` forms copier-check accepts, after quotes, comment, `.git` and `/` are stripped
-SRC_OK = (
-    f"gh:{REPO}",
-    f"https://github.com/{REPO}",
-    f"git@github.com:{REPO}",
-    f"ssh://git@github.com/{REPO}",
-)
+SRC_PREFIXES = ("gh:", "https://github.com/", "git@github.com:", "ssh://git@github.com/")
 # labels only the GitHub Actions factory uses; a repo that only runs the skill doesn't need them
-ACTIONS_ONLY_LABELS = {"factory:design", "factory:designing", "design:approved", "factory:building"}
+ACTIONS_ONLY_LABELS = {"factory:design", "design:approved"}
 VERSION_FILE = f"{FACTORY}/VERSION"
 BRANCH_PREFIX = "local/adopt-"
 # what `fetch` takes from a tag: every skill folder, plus data we only read
@@ -113,11 +111,13 @@ def parse_tag(tag: str) -> tuple[int, int, int]:
 # --- reading a repo -------------------------------------------------------------------------
 
 
-def is_agent_factory(root: Path) -> bool:
+def is_template_repo(root: Path) -> bool:
     if (root / "copier.yml").is_file() and (root / "template").is_dir():
         return True
     url = git(root, "config", "--get", "remote.origin.url", check=False).strip()
-    return bool(re.search(rf"{re.escape(REPO)}(\.git)?/?$", url, re.IGNORECASE))
+    return any(
+        re.search(rf"{re.escape(name)}(\.git)?/?$", url, re.IGNORECASE) for name in OFFICIAL_REPOS
+    )
 
 
 def dirty_entries(root: Path) -> list[str]:
@@ -126,8 +126,8 @@ def dirty_entries(root: Path) -> list[str]:
 
 
 def preflight(root: Path) -> dict:
-    if is_agent_factory(root):
-        raise Refuse("this is agent-factory itself (or a fork of it); the sync never runs here")
+    if is_template_repo(root):
+        raise Refuse("this is amplifactory itself (or a fork of it); the sync never runs here")
     dirty = dirty_entries(root)
     if dirty:
         raise Refuse("working tree is not clean (commit or stash first):\n  " + "\n  ".join(dirty))
@@ -530,11 +530,11 @@ def src_path_ok(read) -> bool:
     v = v.removesuffix("/").removesuffix(".git")  # once each, as in the URLs Copier builds
     # the scheme or alias is case-sensitive, as in Copier (`GH:` would be a local path); the
     # owner/repo part is not
-    for ok in SRC_OK:
-        prefix = ok[: -len(REPO)]
-        if v.startswith(prefix) and v[len(prefix) :].lower() == REPO.lower():
-            return True
-    return False
+    return any(
+        v.startswith(prefix) and v[len(prefix) :].lower() == name.lower()
+        for prefix in SRC_PREFIXES
+        for name in OFFICIAL_REPOS
+    )
 
 
 def copier_check(root: Path, tag: str, source: str) -> None:
@@ -561,7 +561,8 @@ def copier_check(root: Path, tag: str, source: str) -> None:
     if not src_path_ok(read):
         src = answer_value(read(".copier-answers.yml"), "_src_path")
         raise Refuse(
-            f"_src_path {src!r} is not {REPO} on GitHub (a local clone or a fork?). On "
+            f"_src_path {src!r} is not {REPO} (or its old name {OFFICIAL_REPOS[1]}) on GitHub "
+            f"(a local clone or a fork?). On "
             f"{BRANCH_PREFIX}{tag}: replace the existing `_src_path` line in .copier-answers.yml with `_src_path: gh:{REPO}` (edit it, do not add a second line), commit "
             f"(copier update refuses a dirty tree), run this check again, then "
             f"`copier update --vcs-ref {tag} --defaults --conflict inline`"
@@ -1004,15 +1005,20 @@ def _self_test(tmp: Path) -> None:
     _refuses(parse_labels, "LABELS=(ok $(rm) P0)\n")
     _refuses(parse_labels, "LABELS=(-rf)\n")
     assert missing_labels(["a", "P0", "b"], ["A", "p0", "zzz"]) == ["b"]
-    assert plan_labels(["P0", "factory:design", "factory:building"], True) == (
+    assert plan_labels(["P0", "factory:design", "design:approved"], True) == (
         ["P0"],
-        ["factory:design", "factory:building"],
+        ["factory:design", "design:approved"],
+    )
+    # #77: the progress labels the skill sets are created, never skipped
+    assert plan_labels(["factory:designing", "factory:design", "factory:building"], True) == (
+        ["factory:designing", "factory:building"],
+        ["factory:design"],
     )
     assert plan_labels(["P0", "factory:design"], False) == (["P0", "factory:design"], [])
     assert "--force" not in " ".join(push_args("local/adopt-v0.2.0"))
     assert not any(a.startswith("+") for a in push_args("local/adopt-v0.2.0"))
 
-    # --- preflight: dirty (untracked counts), agent-factory itself
+    # --- preflight: dirty (untracked counts), amplifactory itself
     assert preflight(down)["kind"] == "shadowing"
     _w(down, "stray.txt", "x")
     _refuses(preflight, down)
@@ -1027,7 +1033,12 @@ def _self_test(tmp: Path) -> None:
     byurl.mkdir()
     g(byurl, "init", "-q", "-b", "main")
     g(byurl, "remote", "add", "origin", f"git@github.com:{REPO}.git")
-    assert is_agent_factory(byurl) and not is_agent_factory(down)
+    assert is_template_repo(byurl) and not is_template_repo(down)
+    byold = tmp / "by-old-url"
+    byold.mkdir()
+    g(byold, "init", "-q", "-b", "main")
+    g(byold, "remote", "add", "origin", "git@github.com:rahmansunny071/agent-factory.git")
+    assert is_template_repo(byold)  # the old name, still the template repo
 
     # --- status: no VERSION needs --assume-tag; downgrade and wrong-kind refused
     _refuses(compute_status, down, source, None)
@@ -1335,38 +1346,40 @@ def _self_test_folders(tmp: Path, g, commit_all) -> None:
     def ok(text: str) -> bool:
         return src_path_ok(lambda p: text if p == ".copier-answers.yml" else None)
 
-    for good in (
-        f"gh:{REPO}",
-        f"'gh:{REPO}'",
-        f'"https://github.com/{REPO}.git"',
-        f"https://github.com/{REPO}/",
-        f"git@github.com:{REPO}.git",
-        f"ssh://git@github.com/{REPO}.git/",
-        f"gh:{REPO.upper()} # a comment",
-    ):
-        assert ok(answers(good)), good
-    for bad in (
-        "/Users/me/agent-factory",
-        "../agent-factory",
-        f"file:///tmp/{REPO}",
-        f"https://gitlab.com/{REPO}",
-        f"git+https://github.com/{REPO}",
-        "gh:someone-else/agent-factory",
-        f"gh:{REPO}-fork",
-        f"https://evilgithub.com/{REPO}",
-        "",
-    ):
-        assert not ok(answers(bad)), bad
+    for name in OFFICIAL_REPOS:  # every case holds for the new and the old name (#67)
+        short = name.split("/")[1]
+        for good in (
+            f"gh:{name}",
+            f"'gh:{name}'",
+            f'"https://github.com/{name}.git"',
+            f"https://github.com/{name}/",
+            f"git@github.com:{name}.git",
+            f"ssh://git@github.com/{name}.git/",
+            f"gh:{name.upper()} # a comment",
+        ):
+            assert ok(answers(good)), good
+        for bad in (
+            f"/Users/me/{short}",
+            f"../{short}",
+            f"file:///tmp/{name}",
+            f"https://gitlab.com/{name}",
+            f"git+https://github.com/{name}",
+            f"gh:someone-else/{short}",
+            f"gh:{name}-fork",
+            f"https://evilgithub.com/{name}",
+            "",
+        ):
+            assert not ok(answers(bad)), bad
+        for bad in (  # the scheme and alias are case-sensitive in Copier; `.git` and `/` strip once
+            f"GH:{name}",
+            f"HTTPS://GITHUB.COM/{name}",
+            f"gh:{name}.git.git",
+            f"https://github.com/{name}/.git",
+            f"gh:{name}//",
+        ):
+            assert not ok(answers(bad)), bad
+        assert ok(answers(f"gh:{name.upper()}.git/"))  # the owner/repo part is case-insensitive
     assert not ok(answers(None)) and not ok("")
-    for bad in (  # the scheme and alias are case-sensitive in Copier; `.git` and `/` strip once
-        f"GH:{REPO}",
-        f"HTTPS://GITHUB.COM/{REPO}",
-        f"gh:{REPO}.git.git",
-        f"https://github.com/{REPO}/.git",
-        f"gh:{REPO}//",
-    ):
-        assert not ok(answers(bad)), bad
-    assert ok(answers(f"gh:{REPO.upper()}.git/"))  # the owner/repo part is case-insensitive
     # a repeated key: Copier keeps the LAST, so the first match proves nothing
     dup_good_first = answers(f"gh:{REPO}") + "_src_path: /Users/me/agent-factory-clone\n"
     dup_bad_first = "_src_path: /Users/me/agent-factory-clone\n" + answers(f"gh:{REPO}")
@@ -1381,9 +1394,21 @@ def _self_test_folders(tmp: Path, g, commit_all) -> None:
     _refuses(copier_check, gen, "v0.2", msrc)  # not vX.Y.Z
     _refuses(copier_check, gen, "v0.4.0", msrc)  # lightweight tag
     _refuses(copier_check, gen, "v9.9.9", msrc)  # no such tag
+    # an adopter still on the old name passes end to end, and `status` reports src_ok (#67)
+    old = f"gh:{OFFICIAL_REPOS[1]}"
+    _w(gen, ".copier-answers.yml", answers(old))
+    commit_all(gen, "old name")
+    copier_check(gen, "v0.2.0", msrc)
+    genorigin = tmp / "gen-origin.git"
+    g(tmp, "init", "-q", "--bare", "-b", "main", str(genorigin))
+    g(gen, "remote", "add", "origin", str(genorigin))
+    g(gen, "push", "-q", "origin", "main")
+    assert compute_status(gen, msrc, None)["src_ok"] is True
+    _w(gen, ".copier-answers.yml", answers(f"gh:{REPO}"))
+    commit_all(gen, "new name")
     _w(gen, ".copier-answers.yml", answers(f"gh:{REPO}", "v0.1.0-3-gabc123"))
     assert "release tag" in _refuses(copier_check, gen, "v0.2.0", msrc)  # describe string
-    _w(gen, ".copier-answers.yml", answers(str(tmp / "agent-factory-clone")))
+    _w(gen, ".copier-answers.yml", answers(str(tmp / "amplifactory-clone")))
     assert "_src_path" in _refuses(copier_check, gen, "v0.2.0", msrc)
     _w(gen, ".copier-answers.yml", answers(None))
     _refuses(copier_check, gen, "v0.2.0", msrc)

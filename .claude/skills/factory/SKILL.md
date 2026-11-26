@@ -13,12 +13,12 @@ description: >-
 
 # Factory
 
-This repo is built by an issue-driven agent factory (see `README.md` → "How this repo is built" and
+This repo is built by an issue-driven agent factory (see `README.md` → "Getting started" and
 `CLAUDE.md`). This skill runs it from a Claude Code session. You (Opus) are the orchestrator: a Sonnet
 **builder** plans and codes, a fresh Opus **reviewer** checks the result, and you merge when the gates
 pass. The maintainer answers questions **asynchronously on the PR**; the run never sits waiting.
 
-Four principles shape everything below. All of them came out of real runs:
+Five principles shape everything below. All of them came out of real runs:
 
 1. **Urgency over completeness.** Before the project's first release (`Release phase: mvp` in
    `CLAUDE.md`), the goal is a main path that works end to end, then iteration. Only **blockers** are
@@ -33,6 +33,15 @@ Four principles shape everything below. All of them came out of real runs:
    `lane` whose native GitHub **sub-issues, in order**, are processed one at a time. Independent lanes
    can run in parallel. Priorities (`P0`–`P3`) rank lanes and issues; native **"blocked by"** links
    (and the body's "Depends on #N" line as a fallback) express dependencies between issues or whole lanes.
+5. **Proposals become issues.** Work you propose becomes issues, not an ad-hoc fix in the session. This
+   covers what steps 5-7 don't already route: audit results, recommended follow-ups, fixes you would
+   offer at the end of a turn or in the final report. Propose the structure: a sub-issue of the lane that
+   fits, a new lane (`lane` + a `P` label) if none does, a doc-debt sub-issue for doc todos, naming the
+   lane, title and priority. One confirmation covers it: create them with `gh issue create` (as in Mode 1
+   step 5) and wire them with `lanes.py` (`priority`, `sub-add` (it appends to the lane; `order` moves
+   issues forward), `block`, `project-add`; `doc-debt add` for doc todos); then the work goes through the
+   queue. Findings inside a run keep their routes (step 7, doc-debt, PR questions). Problems in the
+   factory template repo are `lesson` issues.
 
 ## Where knowledge lives
 
@@ -53,14 +62,14 @@ When the run log or memory disagrees with GitHub, GitHub wins.
    knowledge lives") and the stage prompts in `.claude/commands/`.
 4. **Repo slug.** `gh repo view --json nameWithOwner -q .nameWithOwner`. Paste that exact value into
    every brief; never type it from memory.
-5. **What's waiting.** Run `python .claude/skills/factory/scripts/queue.py`. It shows issues in progress,
+5. **What's waiting.** Run `python3 .claude/skills/factory/scripts/queue.py`. It shows issues in progress,
    **issues waiting on the maintainer and whether they've replied**, and the ready queue.
    `runlog.py status` shows the local log's view. If anything is in progress or has new replies, handle
    that first (see "Resume"). Clear stale labels: `gh issue list --state closed --label
    factory:ready-to-merge`, then `gh issue edit <N> --remove-label factory:ready-to-merge` for each.
    Merged PRs keep it too: `gh pr list --state merged --label factory:ready-to-merge`, then
    `gh pr edit <N> --remove-label factory:ready-to-merge`.
-6. **Documentation tech-debt.** `python .claude/skills/factory/scripts/lanes.py doc-debt find` prints the
+6. **Documentation tech-debt.** `python3 .claude/skills/factory/scripts/lanes.py doc-debt find` prints the
    tracking issue's number (an open issue titled exactly "Documentation tech-debt", labelled
    `documentation`), creating it if it's missing, so repos bootstrapped before v0.6.0 work too. Every
    documentation todo that isn't fixed in the PR at hand becomes a sub-issue of it (`doc-debt add`).
@@ -309,13 +318,15 @@ answer right away; resume handles it.
 
 ## When you're done
 
-`python .claude/skills/factory/scripts/runlog.py summary` prints per-issue wall time, rounds and tokens by
+`python3 .claude/skills/factory/scripts/runlog.py summary` prints per-issue wall time, rounds and tokens by
 model and role. Report:
 - issues merged (PR links);
 - **issues waiting on the maintainer**, with links to their open threads;
 - **PRs ready to merge** (`factory:ready-to-merge`), with the merge command for each, so the maintainer
   can merge them in one batch;
 - improvements and doc-debt sub-issues filed;
+- follow-ups you recommend, each proposed as an issue, sub-issue or lane (principle 5), not as an offer
+  to fix it in the session;
 - decisions made on the maintainer's behalf;
 - the cost summary.
 

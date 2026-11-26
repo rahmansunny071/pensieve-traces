@@ -20,11 +20,11 @@ Issues not in any lane are listed separately with the same states (repos without
 The "Documentation tech-debt" tracking issue is never work itself and is left out; its open sub-issues
 (doc todos, labelled `improvement`) are listed with the issues outside lanes.
 
-    python .claude/skills/factory/scripts/queue.py              # table
-    python .claude/skills/factory/scripts/queue.py --lanes 2    # plan for two lanes in parallel
-    python .claude/skills/factory/scripts/queue.py --json
-    python .claude/skills/factory/scripts/queue.py --offline    # skip reply/dependency API calls
-    python .claude/skills/factory/scripts/queue.py --self-test
+    python3 .claude/skills/factory/scripts/queue.py              # table
+    python3 .claude/skills/factory/scripts/queue.py --lanes 2    # plan for two lanes in parallel
+    python3 .claude/skills/factory/scripts/queue.py --json
+    python3 .claude/skills/factory/scripts/queue.py --offline    # skip reply/dependency API calls
+    python3 .claude/skills/factory/scripts/queue.py --self-test
 """
 
 from __future__ import annotations

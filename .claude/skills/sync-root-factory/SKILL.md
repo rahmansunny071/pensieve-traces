@@ -1,17 +1,17 @@
 ---
 name: sync-root-factory
 description: >-
-  Bring this repo up to the latest release tag of rahmansunny071/agent-factory in one step and hand
+  Bring this repo up to the latest release tag of rahmansunny071/amplifactory in one step and hand
   the result over as a pull request. Use this whenever the user asks to sync, update, upgrade or adopt
-  the factory (or the agent-factory template) to the latest release, "sync the factory", "adopt
-  agent-factory vX.Y.Z", or asks which factory version the repo is on. It works for repos generated
+  the factory (or the amplifactory template) to the latest release, "sync the factory", "adopt
+  amplifactory vX.Y.Z", or asks which factory version the repo is on. It works for repos generated
   from the template (copier update) and for repos that only carry a copy of the factory skill.
 ---
 
 # Sync root factory
 
-Moves this repo to the **latest release tag** of `rahmansunny071/agent-factory` and opens one PR
-("Factory: adopt agent-factory vX.Y.Z"). It **overwrites files**, so a script
+Moves this repo to the **latest release tag** of `rahmansunny071/amplifactory` and opens one PR
+("Factory: adopt amplifactory vX.Y.Z"). It **overwrites files**, so a script
 (`scripts/sync.py`) enforces every rule that code can check, and you do the judgement. If `sync.py`
 refuses, stop and report the reason; do not work around it.
 
@@ -23,7 +23,7 @@ point `--repo` at the repo. If any line fails, or the tag is not annotated, stop
 ```bash
 set -e
 R=$(git rev-parse --show-toplevel)           # the repo to sync
-URL=https://github.com/rahmansunny071/agent-factory.git
+URL=https://github.com/rahmansunny071/amplifactory.git
 TAG=$(git ls-remote --tags --refs "$URL" 'v*' | sed 's|.*refs/tags/||' \
       | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)    # the latest release tag
 T=$(mktemp -d)                               # outside the repo
@@ -43,7 +43,7 @@ works when the default branch is protected and the repo has no `sync-root-factor
 1. **New branch only**, `local/adopt-<tag>`, cut from a freshly fetched `origin/<default branch>`. Never
    touch the user's current branch or uncommitted work. Refuse if the tree is dirty (`git status
    --porcelain --untracked-files=all` is not empty) or the branch exists locally or on origin.
-2. **Refuse inside agent-factory itself** (or a fork of it).
+2. **Refuse inside amplifactory itself** (or a fork of it).
 3. **Files come only from the release tag**, fetched the way `fetch_tag` does (depth-1 fetch of
    `refs/tags/<tag>`, annotated tags only). Never from `main`, never from a branch, never from a
    local clone of the template.
@@ -70,7 +70,7 @@ works when the default branch is protected and the repo has no `sync-root-factor
 8. **Push only** `local/adopt-<tag>` (`sync.py push`: explicit refspec, never `--force`).
    **Never run `gh pr merge`**; the maintainer merges.
 9. Never pass `--source` to `sync.py` (it exists for the self-test). `--repo` is expected: it is how the
-   extracted script finds the repo; preflight still refuses agent-factory itself and a dirty tree.
+   extracted script finds the repo; preflight still refuses amplifactory itself and a dirty tree.
 
 ## Flow
 
@@ -90,7 +90,8 @@ works when the default branch is protected and the repo has no `sync-root-factor
 
 1. `sf copier-check <tag>` first. It refuses unless the tag is annotated, `_commit` is a `vX.Y.Z` tag
    (a describe string such as `v0.6.0-3-gabc` is reported as-is to the maintainer) and `_src_path` is
-   `gh:rahmansunny071/agent-factory` (or its https/ssh GitHub URL; no local clone, no fork). If the
+   `gh:rahmansunny071/amplifactory` or the old `gh:rahmansunny071/agent-factory` (or either one's
+   https/ssh GitHub URL; no local clone, no fork). If the
    source is wrong, its message gives the recipe: on the adopt branch set `_src_path` in
    `.copier-answers.yml`, **commit** (copier update refuses a dirty tree), rerun `copier-check`.
 2. `uvx copier update --vcs-ref <tag> --defaults --conflict inline`.
@@ -122,14 +123,14 @@ works when the default branch is protected and the repo has no `sync-root-factor
 4. `sf labels --tag <tag>` lists labels the tag's `bootstrap.sh` creates that this repo lacks (it prints
    `none missing` when there are none, so empty output never means success);
    add `--create` to create them. In a shadowing repo it skips the labels only the Actions factory
-   uses (`factory:design`, `factory:designing`, `design:approved`, `factory:building`) and prints
+   uses (`factory:design`, `design:approved`) and prints
    them as skipped; list them under Open. Put the created labels in the Handoff.
 
 ## Finish
 
 1. Run the repo's own "checks pass" list from `CLAUDE.md`, and the self-tests of the synced skill:
-   `for s in queue lanes runlog; do python .claude/skills/factory/scripts/$s.py --self-test || exit 1; done`.
-2. Commit, `sf push <tag>`, and open a PR titled `Factory: adopt agent-factory <tag>` whose
+   `for s in queue lanes runlog; do python3 .claude/skills/factory/scripts/$s.py --self-test || exit 1; done`.
+2. Commit, `sf push <tag>`, and open a PR titled `Factory: adopt amplifactory <tag>` whose
    body is a Handoff:
    - **Changed**: copied folders (shadowing) or the copier update, the hand-ports, created labels;
    - **Key decisions**: what you ported and why, what you kept of the repo's side;

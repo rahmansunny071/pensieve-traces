@@ -5,27 +5,27 @@ Dependencies are native **"blocked by"** links. Priority is exactly one `P0`–`
 wrap the GitHub REST calls (which need internal issue ids, not numbers) so the orchestrator doesn't
 improvise them. Stdlib only; uses `gh`.
 
-    python .claude/skills/factory/scripts/lanes.py sub-add 40 4 6        # lane #40: #4 then #6
-    python .claude/skills/factory/scripts/lanes.py order 40 6 4          # reorder: #6 first
-    python .claude/skills/factory/scripts/lanes.py block 8 --by 5        # #8 blocked by #5
-    python .claude/skills/factory/scripts/lanes.py priority 4 P0         # exactly one P label
-    python .claude/skills/factory/scripts/lanes.py project-add 40 4 6 --project 3   # + Priority
-    python .claude/skills/factory/scripts/lanes.py show 40               # the lane's order
-    python .claude/skills/factory/scripts/lanes.py --self-test
+    python3 .claude/skills/factory/scripts/lanes.py sub-add 40 4 6  # lane #40: append #4, #6 (last)
+    python3 .claude/skills/factory/scripts/lanes.py order 40 6 4          # move #6 to the front
+    python3 .claude/skills/factory/scripts/lanes.py block 8 --by 5        # #8 blocked by #5
+    python3 .claude/skills/factory/scripts/lanes.py priority 4 P0         # exactly one P label
+    python3 .claude/skills/factory/scripts/lanes.py project-add 40 4 6 --project 3   # + Priority
+    python3 .claude/skills/factory/scripts/lanes.py show 40               # the lane's order
+    python3 .claude/skills/factory/scripts/lanes.py --self-test
 
 Documentation debt: one open issue titled exactly "Documentation tech-debt" (labels `documentation`,
 `P2`) tracks doc todos as native sub-issues (labels `documentation`, `improvement`, `P2`).
 
-    python .claude/skills/factory/scripts/lanes.py doc-debt find         # find or create; prints #N
-    python .claude/skills/factory/scripts/lanes.py doc-debt add --title "README: …" --body-file f.md
-    python .claude/skills/factory/scripts/lanes.py doc-debt add --issue 44   # link an existing issue
-    python .claude/skills/factory/scripts/lanes.py doc-debt list         # open todos, for ride-alongs
+    python3 .claude/skills/factory/scripts/lanes.py doc-debt find  # find or create; prints #N
+    python3 .claude/skills/factory/scripts/lanes.py doc-debt add \\
+        --title "README: …" --body-file f.md
+    python3 .claude/skills/factory/scripts/lanes.py doc-debt add --issue 44  # link existing issue
+    python3 .claude/skills/factory/scripts/lanes.py doc-debt list  # open todos, for ride-alongs
 """
 
 from __future__ import annotations
 
 import argparse
-import itertools
 import json
 import re
 import subprocess
@@ -60,12 +60,21 @@ def issue_id(r: str, number: int) -> int:
 
 
 def sub_issues(r: str, lane: int) -> list[int]:
-    return [i["number"] for i in json.loads(_gh("api", f"repos/{r}/issues/{lane}/sub_issues"))]
+    """The lane's sub-issue numbers in order (paginated: GitHub returns 30 per page)."""
+    out = _gh("api", f"repos/{r}/issues/{lane}/sub_issues", "--paginate", "--jq", ".[].number")
+    return [int(line) for line in out.splitlines() if line.strip()]
 
 
 def sub_add(r: str, lane: int, numbers: list[int]) -> None:
-    present = set(sub_issues(r, lane))
-    for n in numbers:
+    """Append issues to the end of a lane, in the order given.
+
+    The lane's existing order is kept and issues already in it stay where they are. (`order` is the
+    command that moves issues to the front; it is not used here to put new ones first.)
+    """
+    existing = sub_issues(r, lane)
+    present = set(existing)
+    added: list[int] = []
+    for n in dict.fromkeys(numbers):
         if n in present:
             print(f"#{n} already in lane #{lane}")
             continue
@@ -77,8 +86,12 @@ def sub_add(r: str, lane: int, numbers: list[int]) -> None:
             "-F",
             f"sub_issue_id={issue_id(r, n)}",
         )
+        added.append(n)
         print(f"added #{n} to lane #{lane}")
-    order(r, lane, numbers)
+    wanted = existing + added
+    # GitHub appends a new sub-issue at the end, so this normally already holds
+    if added and sub_issues(r, lane) != wanted:
+        order(r, lane, wanted)
 
 
 def order(r: str, lane: int, wanted: list[int]) -> None:
@@ -103,7 +116,7 @@ def order(r: str, lane: int, wanted: list[int]) -> None:
             "-F",
             f"before_id={ids[front]}",
         )
-    for prev, n in itertools.pairwise(wanted):
+    for prev, n in zip(wanted, wanted[1:]):  # noqa: RUF007 (itertools.pairwise is 3.10+)
         _gh(
             "api",
             "-X",
@@ -311,6 +324,54 @@ def doc_debt_list(r: str) -> list[dict]:
     return [{"number": c["number"], "title": c["title"]} for c in todos]
 
 
+def _self_test_sub_add() -> None:
+    """sub-add appends; the fake `_gh` models GitHub: POST appends, PATCH priority moves."""
+    global _gh
+    lanes: dict = {}  # lane number to its ordered issue numbers
+    prepend = False  # True models a GitHub whose POST puts the new issue first
+
+    def fake(*args: str) -> str:
+        path = next(a for a in args if a.startswith("repos/"))
+        parts = path.split("/")  # repos, owner, name, issues, N, ...
+        fields = dict(a.split("=", 1) for a in args if "=" in a and not a.startswith("repos/"))
+        if len(parts) == 5:  # issue id: id = number + 1000
+            return f"{int(parts[4]) + 1000}\n"
+        lane = lanes.setdefault(int(parts[4]), [])
+        if "-X" not in args:  # GET --jq '.[].number': one number per line, 30 per page
+            shown = lane if "--paginate" in args else lane[:30]  # as GitHub does
+            return "".join(f"{n}\n" for n in shown)
+        moved = int(fields["sub_issue_id"]) - 1000
+        if parts[-1] == "sub_issues":  # POST: GitHub appends at the end
+            lane.insert(0 if prepend else len(lane), moved)
+        else:  # PATCH .../priority with before_id or after_id
+            lane.remove(moved)
+            if "before_id" in fields:
+                lane.insert(lane.index(int(fields["before_id"]) - 1000), moved)
+            else:
+                lane.insert(lane.index(int(fields["after_id"]) - 1000) + 1, moved)
+        return "{}"
+
+    real, _gh = _gh, fake
+    try:
+        sub_add("o/r", 1, [5, 3, 9])  # a new lane keeps the given order
+        assert lanes[1] == [5, 3, 9], lanes
+        sub_add("o/r", 1, [4])  # appends, does not jump ahead
+        assert lanes[1] == [5, 3, 9, 4], lanes
+        sub_add("o/r", 1, [8, 3, 2])  # #3 is already there and stays put
+        assert lanes[1] == [5, 3, 9, 4, 8, 2], lanes
+        order("o/r", 1, [2])  # order is the way to move one to the front
+        assert lanes[1] == [2, 5, 3, 9, 4, 8], lanes
+        lanes[7] = list(range(100, 135))  # more than one page of 30
+        assert sub_issues("o/r", 7) == list(range(100, 135))
+        prepend = True  # POST prepends: sub_add's order(wanted) fallback restores the order
+        sub_add("o/r", 8, [5, 3])
+        assert lanes[8] == [5, 3], lanes
+        sub_add("o/r", 8, [9, 4])
+        assert lanes[8] == [5, 3, 9, 4], lanes
+    finally:
+        _gh = real
+
+
 def _self_test() -> None:
     assert PRIORITIES == ("P0", "P1", "P2", "P3")
 
@@ -331,6 +392,7 @@ def _self_test() -> None:
     assert pick_tracking([iss(43, title="documentation tech-debt")]) is None
     assert issue_number_from_url("https://github.com/o/r/issues/44\n") == 44
     assert DOC_TODO_LABELS == ("documentation", "improvement", "P2")
+    _self_test_sub_add()
     print("lanes.py self-test: ok")
 
 
@@ -338,10 +400,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--self-test", action="store_true")
     sub = parser.add_subparsers(dest="cmd")
-    p = sub.add_parser("sub-add", help="add issues to a lane, in this order")
+    p = sub.add_parser(
+        "sub-add",
+        help="append issues to the end of a lane, in this order (keeps the existing order)",
+    )
     p.add_argument("lane", type=int)
     p.add_argument("issues", type=int, nargs="+")
-    p = sub.add_parser("order", help="reorder a lane's issues (these first, in this order)")
+    p = sub.add_parser(
+        "order", help="move these issues to the front of a lane, in this order (sub-add appends)"
+    )
     p.add_argument("lane", type=int)
     p.add_argument("issues", type=int, nargs="+")
     p = sub.add_parser("block", help='add native "blocked by" links')
