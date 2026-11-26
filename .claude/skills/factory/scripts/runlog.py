@@ -6,18 +6,18 @@ source of truth: entries POINT at it (pr, commit, thread ids) and never copy its
 
 Logs live in `.factory/runs/<YYYY-MM-DD>.jsonl` at the repo root (gitignored). Stdlib only.
 
-    python .claude/skills/factory/scripts/runlog.py add --issue 4 --step plan --model sonnet \\
+    python3 .claude/skills/factory/scripts/runlog.py add --issue 4 --step plan --model sonnet \\
         --tokens 41000 --ms 52000 --note "plan pushed"
-    python .claude/skills/factory/scripts/runlog.py status     # last step per issue; in-flight ones
-    python .claude/skills/factory/scripts/runlog.py summary    # wall time, rounds, tokens by model
-    python .claude/skills/factory/scripts/runlog.py --self-test
+    python3 .claude/skills/factory/scripts/runlog.py status  # last step per issue; in-flight ones
+    python3 .claude/skills/factory/scripts/runlog.py summary  # wall time, rounds, tokens by model
+    python3 .claude/skills/factory/scripts/runlog.py --self-test
 
 Steps used by the factory skill: plan, plan-check, design-review, build, review, fix, handoff-written,
 needs-maintainer, resume, merge, ready-to-merge, blocked, decision, improvement-filed. An issue whose
 last step is `merge` is done; `needs-maintainer` and `ready-to-merge` are waiting on the maintainer;
 anything else is in flight.
 
-    python .claude/skills/factory/scripts/runlog.py add --issue 4 --step needs-maintainer \
+    python3 .claude/skills/factory/scripts/runlog.py add --issue 4 --step needs-maintainer \
         --actor reviewer --model opus --pr 29 --commit a1b2c3d --thread 7126001 --thread 7126002
 """
 
